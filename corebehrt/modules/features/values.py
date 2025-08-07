@@ -1,5 +1,5 @@
 import pandas as pd
-from corebehrt.constants.data import CONCEPT_COL
+from corebehrt.constants.data import CONCEPT_COL, VALUE_COL, VAL_TOKEN
 
 
 def _safe_convert_to_numeric(val):
@@ -23,12 +23,83 @@ def _safe_convert_to_numeric(val):
             return pd.NA
     return pd.NA
 
+class ValueCreatorContinuous:
+    """
+    A class to load normalise values in data frames.
+    Expects a 'result' column and 'concept' column to be present.
+    """
+
+    @staticmethod
+    def add_null_token(concepts: pd.DataFrame, null_token: int) -> pd.DataFrame:
+        concepts[VALUE_COL] = pd.to_numeric(concepts[VALUE_COL], errors="coerce")
+        concepts[VALUE_COL] = concepts[VALUE_COL].fillna(null_token)
+        return concepts
+
+    @staticmethod
+    def add_values(concepts: pd.DataFrame, bin_values: bool = False, bin_mapping: dict = None, num_bins: int = 10) -> pd.DataFrame:
+        concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
+
+        # Bin values if bin_values is True
+        if bin_values:
+            print("Binning values")
+            if bin_mapping is not None:
+                concepts[VALUE_COL] = concepts.groupby(CONCEPT_COL).apply(
+                    lambda group: ValueCreatorContinuous.bin(
+                        group[VALUE_COL], 
+                        num_bins=bin_mapping.get(group[CONCEPT_COL].iloc[0], num_bins)
+                    ) if group[VALUE_COL].notna().any() 
+                    else pd.Series([None] * len(group), index=group.index)
+                ).reset_index(level=0, drop=True)
+            else:
+                concepts[VALUE_COL] = ValueCreatorContinuous.bin(
+                    concepts[VALUE_COL], num_bins=num_bins
+            )
+        else:
+            print("No binning applied")
+
+        # Add index and order
+        concepts["index"] = concepts.index
+        concepts.loc[:, "order"] = 0
+        
+        val_mask = concepts[VALUE_COL].notna()
+        if val_mask.any():
+            values = concepts[val_mask].copy()
+            values.loc[:, CONCEPT_COL] = VAL_TOKEN
+            values.loc[:, "order"] = 1
+            concepts.loc[val_mask, VALUE_COL] = np.nan
+            concatted = pd.concat([concepts, values], ignore_index=True)
+        else:
+            concatted = concepts
+            
+        return concatted
+
+
+    @staticmethod
+    def bin(normalized_values: pd.Series, num_bins=100) -> pd.Series:
+        """
+        Bins the values in a series into num_bins bins. Expects the values to be normalised.
+        """
+        normalized_values = pd.to_numeric(normalized_values, errors="coerce")
+        val_mask = normalized_values.notna()
+        normalized_values[val_mask] = normalized_values[val_mask].mul(num_bins)
+        normalized_values = normalized_values.astype(object)
+        normalized_values[val_mask] = (
+            normalized_values[val_mask].astype(int)
+        )
+        normalized_values[val_mask] = normalized_values[val_mask]
+        return normalized_values
 
 class ValueCreatorDiscrete:
     """
     A class to load normalise values in data frames.
     Expects a 'result' column and 'concept' column to be present.
     """
+
+    @staticmethod
+    def add_null_token(concepts: pd.DataFrame, null_token: int) -> pd.DataFrame:
+        concepts[VALUE_COL] = pd.to_numeric(concepts[VALUE_COL], errors="coerce")
+        concepts[VALUE_COL] = concepts[VALUE_COL].fillna(null_token)
+        return concepts
 
     @staticmethod
     def bin_results(
@@ -99,7 +170,7 @@ class ValueCreatorDiscrete:
         concatted = pd.concat([concepts, values])
 
         # Drop columns that are not needed
-        columns_to_drop = ["numeric_value", "binned_value"]
+        columns_to_drop = [VALUE_COL, "binned_value"]
         if add_prefix:
             columns_to_drop.append("prefix")
 

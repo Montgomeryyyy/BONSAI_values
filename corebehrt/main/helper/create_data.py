@@ -11,7 +11,11 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
+<<<<<<< HEAD
     SEGMENT_COL,
+=======
+    VALUE_NULL_TOKEN,
+>>>>>>> 3242bde9 (added numeric embedding layer)
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -39,7 +43,6 @@ def load_tokenize_and_save(
         shard_path = join(features_path, split, shard)
         shard_n = shard.split(".")[0]
         df = pd.read_parquet(shard_path).set_index(PID_COL)
-
         df = tokenizer(df).reset_index()
         df.to_parquet(
             join(tokenized_path, f"features_{split}", f"{shard_n}.parquet"),
@@ -273,6 +276,7 @@ def handle_numeric_values(
         return concepts
 
     if features_cfg and "values" in features_cfg:
+        bin_values = features_cfg.values.value_creator_kwargs.get("bin_values", False)
         num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
         add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
         separator_regex = features_cfg.values.value_creator_kwargs.get(
@@ -289,7 +293,28 @@ def handle_numeric_values(
                 separator_regex=separator_regex,
             )
         else:
+            return ValueCreatorContinuous.add_values(
+                concepts,
+                bin_values=bin_values,
+                num_bins=num_bins,
+                bin_mapping=bin_mapping,
+            )
+
             raise ValueError(f"Unsupported value type: {value_type}")
+        # TODO: add both support for discrete and continuous values
+        # num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
+        # add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
+        # separator_regex = features_cfg.values.value_creator_kwargs.get(
+        #     "separator_regex", None
+        # )
+        # if separator_regex is not None and not is_valid_regex(separator_regex):
+        #     raise ValueError(f"Invalid regex: {separator_regex}")
+        # return ValueCreator.bin_results(
+        #     concepts,
+        #     num_bins=num_bins,
+        #     add_prefix=add_prefix,
+        #     separator_regex=separator_regex,
+        # )
 
     return concepts.drop(columns=["numeric_value"])
 

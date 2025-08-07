@@ -21,6 +21,8 @@ features:
       num_bins: 100
       # bin_mapping_func: 
       #   _target_: corebehrt.functional.features.values.power_bin_distance_mean
+      null_token: -1
+      # num_bins: 100
       # add_prefix: true # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
   agg_kwargs:

@@ -15,9 +15,13 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
+<<<<<<< HEAD
     ADMISSION_ID_COL,
     ADMISSION,
     DISCHARGE,
+=======
+    VALUE_COL,
+>>>>>>> 3242bde9 (added numeric embedding layer)
 )
 from corebehrt.functional.utils.time import get_hours_since_epoch
 from corebehrt.functional.features.normalize import normalize_segments_series
@@ -34,6 +38,17 @@ def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:
     concepts[ABSPOS_COL] = get_hours_since_epoch(concepts[TIMESTAMP_COL])
     return concepts
 
+
+def create_values(concepts: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create values for each row in concepts
+    Parameters:
+        concepts: concepts with 'VALUE_COL' column.
+    Returns:
+        concepts with a new 'numeric_value' column
+    """
+    concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
+    return concepts
 
 def create_age_in_years(concepts: pd.DataFrame) -> pd.DataFrame:
     """
