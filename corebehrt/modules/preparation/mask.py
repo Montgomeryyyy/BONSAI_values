@@ -77,4 +77,4 @@ class ConceptMasker:
         )
         concepts[indices_replace] = random_words[indices_replace]
 
-        return concepts, target
+        return concepts, target, selected_indices

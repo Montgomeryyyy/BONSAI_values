@@ -12,8 +12,12 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
+<<<<<<< HEAD
     SEGMENT_COL,
     VALUE_COL,
+=======
+    VALUE_NULL_TOKEN,
+>>>>>>> c73ff1e5 (added numeric embedding layer)
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -297,6 +301,7 @@ def handle_numeric_values(
     if VALUE_COL not in concepts.columns:
         return concepts
 
+<<<<<<< HEAD
     if values_cfg is not None:
         return ValueCreator.add_values(
             concepts,
@@ -308,6 +313,25 @@ def handle_numeric_values(
             separator_regex=values_cfg.get("separator_regex", None),
         )
     return concepts.drop(columns=[VALUE_COL])
+=======
+    if features_cfg and "values" in features_cfg:
+        null_token = getattr(features_cfg.values, "null_token", VALUE_NULL_TOKEN)
+        return ValueCreator.add_null_token(concepts, null_token)
+        # TODO: add both support for discrete and continuous values
+        # num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
+        # add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
+        # separator_regex = features_cfg.values.value_creator_kwargs.get(
+        #     "separator_regex", None
+        # )
+        # if separator_regex is not None and not is_valid_regex(separator_regex):
+        #     raise ValueError(f"Invalid regex: {separator_regex}")
+        # return ValueCreator.bin_results(
+        #     concepts,
+        #     num_bins=num_bins,
+        #     add_prefix=add_prefix,
+        #     separator_regex=separator_regex,
+        # )
+>>>>>>> c73ff1e5 (added numeric embedding layer)
 
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
