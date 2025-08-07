@@ -16,6 +16,8 @@ from corebehrt.constants.data import (
     CONCEPT_FEAT,
     SEGMENT_FEAT,
     TARGET,
+    VALUE_FEAT,
+    VALUE_NULL_TOKEN,
 )
 from corebehrt.modules.preparation.mask import ConceptMasker
 
@@ -27,6 +29,7 @@ class PatientData:
     abspos: List[float]  # or int, depends on your data
     segments: List[int]
     ages: List[float]  # e.g. age at each concept
+    values: List[float]
     outcome: int = None
 
 
@@ -153,6 +156,7 @@ class MLMDataset(Dataset):
         masking_ratio: float = 0.8,
         replace_ratio: float = 0.1,
         ignore_special_tokens: bool = True,
+        value_null_token: int = VALUE_NULL_TOKEN,
     ):
         self.patients = patients
         self.vocabulary = vocabulary
@@ -163,6 +167,7 @@ class MLMDataset(Dataset):
             replace_ratio,
             ignore_special_tokens,
         )
+        self.value_null_token = value_null_token
 
     def __getitem__(self, index: int) -> dict:
         """
@@ -173,11 +178,15 @@ class MLMDataset(Dataset):
         """
         patient = self.patients[index]
         concepts = torch.tensor(patient.concepts, dtype=torch.long)
-        masked_concepts, target = self.masker.mask_patient_concepts(concepts)
+        values = torch.tensor(patient.values, dtype=torch.float)
+        masked_concepts, target, selected_indices = self.masker.mask_patient_concepts(concepts)
+        masked_values = values.clone()
+        masked_values[selected_indices] = self.value_null_token
         attention_mask = torch.ones_like(masked_concepts)
         sample = {
             CONCEPT_FEAT: masked_concepts,
             TARGET: target,
+            VALUE_FEAT: masked_values,
             ABSPOS_FEAT: torch.tensor(patient.abspos, dtype=torch.float),
             SEGMENT_FEAT: torch.tensor(patient.segments, dtype=torch.long),
             AGE_FEAT: torch.tensor(patient.ages, dtype=torch.float),
@@ -206,6 +215,7 @@ class BinaryOutcomeDataset(Dataset):
         )  # Require attention mask for bi-gru head
         sample = {
             CONCEPT_FEAT: torch.tensor(patient.concepts, dtype=torch.long),
+            VALUE_FEAT: torch.tensor(patient.values, dtype=torch.float),
             ABSPOS_FEAT: torch.tensor(patient.abspos, dtype=torch.float),
             SEGMENT_FEAT: torch.tensor(patient.segments, dtype=torch.long),
             AGE_FEAT: torch.tensor(patient.ages, dtype=torch.float),

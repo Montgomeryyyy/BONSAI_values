@@ -17,6 +17,7 @@ DEFAULT_VOCABULARY = {
     UNKNOWN_TOKEN: 3,
     MASK_TOKEN: 4,
 }
+VALUE_NULL_TOKEN = -1
 
 ### Columns ###
 PID_COL = "subject_id"
@@ -45,6 +46,7 @@ SCHEMA = {
     "age": "float32",
     "abspos": "float64",
     "segment": "int32",
+    "numeric_value": "float32",
 }
 
 FEATURES_SCHEMA = {**SCHEMA, "code": "str"}
@@ -60,6 +62,7 @@ CONCEPT_FEAT = "concept"
 AGE_FEAT = "age"
 ABSPOS_FEAT = "abspos"
 SEGMENT_FEAT = "segment"
+VALUE_FEAT = "numeric_value"
 ATTENTION_MASK = "attention_mask"
 TARGET = "target"
 

@@ -9,7 +9,7 @@ from corebehrt.constants.model import (
     TIME2VEC_AGE_SHIFT,
     TIME2VEC_ABSPOS_SHIFT,
 )
-from corebehrt.constants.data import DEFAULT_VOCABULARY, PAD_TOKEN
+from corebehrt.constants.data import DEFAULT_VOCABULARY, PAD_TOKEN, VALUE_NULL_TOKEN
 from typing import Optional
 
 
@@ -45,6 +45,8 @@ class EhrEmbeddings(nn.Module):
         abspos_scale: float = TIME2VEC_ABSPOS_SCALE,
         age_shift: float = TIME2VEC_AGE_SHIFT,
         abspos_shift: float = TIME2VEC_ABSPOS_SHIFT,
+        value_null_token: int = VALUE_NULL_TOKEN,
+        value_embedding_mode: str = "concat"
     ):
         super().__init__()
         self.LayerNorm = nn.LayerNorm(hidden_size)
@@ -54,6 +56,14 @@ class EhrEmbeddings(nn.Module):
         self.concept_embeddings = nn.Embedding(
             vocab_size, hidden_size, padding_idx=pad_token_id
         )
+
+        self.value_embedding_mode = value_embedding_mode
+        self.value_embeddings = ContinuousEmbedding(
+            hidden_size, value_null_token, mode=value_embedding_mode
+        )
+        if value_embedding_mode == "concat":
+            self.projection_layer = nn.Linear(2 * hidden_size, hidden_size)
+
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
         self.age_embeddings = Time2Vec(
             hidden_size,
@@ -73,6 +83,7 @@ class EhrEmbeddings(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor = None,  # concepts
+        values: torch.Tensor = None,
         segments: torch.LongTensor = None,
         age: torch.Tensor = None,
         abspos: torch.Tensor = None,
@@ -82,7 +93,17 @@ class EhrEmbeddings(nn.Module):
             raise ValueError("Invalid input arguments")
         if inputs_embeds is not None:
             return inputs_embeds
-        embeddings = self.concept_embeddings(input_ids)
+        
+        # Separate embedding for concepts and values
+        concept_embeddings = self.concept_embeddings(input_ids)
+        if self.value_embedding_mode == "concat":
+            value_embeds = self.value_embeddings(values, concept_embeddings)
+            embeddings = torch.cat([concept_embeddings, value_embeds], dim=-1)
+            embeddings = self.projection_layer(embeddings)
+        elif self.value_embedding_mode == "film":
+            embeddings = self.value_embeddings(values, concept_embeddings)
+        else:
+            raise ValueError(f"Unknown value_embedding_mode: {self.value_embedding_mode}")
 
         embeddings += self.segment_embeddings(segments)
         embeddings += self.age_embeddings(age)
@@ -105,6 +126,42 @@ class EhrEmbeddings(nn.Module):
             return not any(x is not None for x in [input_ids, segments, age, abspos])
         return all(x is not None for x in [input_ids, segments, age, abspos])
 
+
+class ContinuousEmbedding(nn.Module):
+    def __init__(self, hidden_size: int, null_token: int, mode: str = "concat"):
+        super().__init__()
+        self.null_token = null_token
+        self.mode = mode
+        self.hidden_size = hidden_size
+
+        self.value_proj = nn.Sequential(
+            nn.Linear(1, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size)
+        )
+
+        if self.mode == "film":
+            self.gamma_layer = nn.Linear(hidden_size, hidden_size)
+            self.beta_layer = nn.Linear(hidden_size, hidden_size)
+
+        elif self.mode == "concat":
+            self.concat_proj = nn.Linear(2 * hidden_size, hidden_size)
+
+    def forward(self, values: torch.Tensor, concept_embeds: torch.Tensor) -> torch.Tensor:
+        mask = (values != self.null_token).float().unsqueeze(-1)
+        value_embed = self.value_proj(values.unsqueeze(-1)) * mask  # (B, T, H)
+
+        if self.mode == "film":
+            gamma = self.gamma_layer(concept_embeds)
+            beta = self.beta_layer(concept_embeds)
+            return (gamma * value_embed + beta) * mask
+
+        elif self.mode == "concat":
+            combined = torch.cat([concept_embeds, value_embed], dim=-1)
+            return self.concat_proj(combined) * mask
+
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
 
 class Time2Vec(torch.nn.Module):
     """Time2Vec embedding layer that combines linear and periodic components.

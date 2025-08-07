@@ -1,5 +1,5 @@
 import pandas as pd
-from corebehrt.constants.data import CONCEPT_COL
+from corebehrt.constants.data import CONCEPT_COL, VALUE_COL
 
 
 class ValueCreator:
@@ -7,6 +7,12 @@ class ValueCreator:
     A class to load normalise values in data frames.
     Expects a 'result' column and 'concept' column to be present.
     """
+
+    @staticmethod
+    def add_null_token(concepts: pd.DataFrame, null_token: int) -> pd.DataFrame:
+        concepts[VALUE_COL] = pd.to_numeric(concepts[VALUE_COL], errors="coerce")
+        concepts[VALUE_COL] = concepts[VALUE_COL].fillna(null_token)
+        return concepts
 
     @staticmethod
     def bin_results(
@@ -23,7 +29,7 @@ class ValueCreator:
                 code=pd.Series(dtype="object"),
             )
         concepts["binned_value"] = ValueCreator.bin(
-            concepts["numeric_value"], num_bins=num_bins
+            concepts[VALUE_COL], num_bins=num_bins
         )
 
         # Add index + order
@@ -46,7 +52,7 @@ class ValueCreator:
         concatted = pd.concat([concepts, values])
 
         # Drop columns that are not needed
-        columns_to_drop = ["numeric_value", "binned_value"]
+        columns_to_drop = [VALUE_COL, "binned_value"]
         if add_prefix:
             columns_to_drop.append("prefix")
 

@@ -25,6 +25,8 @@ from corebehrt.constants.data import (
     PAD_TOKEN,
     SEGMENT_FEAT,
     TARGET,
+    VALUE_FEAT,
+    VALUE_NULL_TOKEN,
 )
 from corebehrt.constants.model import (
     TIME2VEC_ABSPOS_SCALE,
@@ -62,6 +64,8 @@ class CorebehrtEncoder(ModernBertModel):
             age_shift=getattr(config, "age_shift", TIME2VEC_AGE_SHIFT),
             abspos_scale=getattr(config, "abspos_scale", TIME2VEC_ABSPOS_SCALE),
             abspos_shift=getattr(config, "abspos_shift", TIME2VEC_ABSPOS_SHIFT),
+            value_null_token=getattr(config, "value_null_token", VALUE_NULL_TOKEN),
+            value_embedding_mode=getattr(config, "value_embedding_mode", "concat")
         )
         self.is_causal = getattr(config, "is_causal", False)
 
@@ -89,6 +93,7 @@ class CorebehrtEncoder(ModernBertModel):
 
         inputs_embeds = self.embeddings(
             input_ids=batch[CONCEPT_FEAT],
+            values=batch[VALUE_FEAT],
             segments=batch[SEGMENT_FEAT],
             age=batch[AGE_FEAT],
             abspos=batch[ABSPOS_FEAT],

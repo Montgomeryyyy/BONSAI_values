@@ -16,7 +16,8 @@ features:
   exclude_regex: ^(?:LAB).* # example regex to exclude all features that start with 'LAB'
   values:
     value_creator_kwargs:
-      num_bins: 100
+      null_token: -1
+      # num_bins: 100
       # add_prefix: true # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
   agg_kwargs:
