@@ -136,7 +136,23 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         self.head = ModernBertPredictionHead(config)
         self.val_head = nn.Linear(config.hidden_size, 1)
         self.val_loss_fct = nn.MSELoss()
-        self.value_loss_weight = getattr(config, "value_loss_weight", 1.0)
+        
+        # Handle value loss weight - make it learnable if specified
+        value_loss_weight = getattr(config, "value_loss_weight", 1.0)
+        learnable_value_weight = getattr(config, "learnable_value_weight", False)
+        
+        if learnable_value_weight:
+            # Register as a learnable parameter
+            self.register_parameter(
+                "value_loss_weight", 
+                nn.Parameter(torch.tensor(value_loss_weight, dtype=torch.float32))
+            )
+            logging.info(f"Value loss weight is learnable, initialized at {value_loss_weight}")
+        else:
+            # Keep as a fixed attribute
+            self.value_loss_weight = value_loss_weight
+            logging.info(f"Value loss weight is fixed at {value_loss_weight}")
+            
         self.value_null_token = getattr(config, "value_null_token", VALUE_NULL_TOKEN)
         self.decoder = nn.Linear(
             config.hidden_size, config.vocab_size, bias=config.decoder_bias
@@ -202,7 +218,12 @@ class CorebehrtForPretraining(CorebehrtEncoder):
 
         # === Final loss ===
         if labels is not None and value_targets is not None:
-            outputs.loss = concept_loss + self.value_loss_weight * value_loss
+            # Handle both learnable parameter and fixed value cases
+            if hasattr(self, 'value_loss_weight') and isinstance(self.value_loss_weight, nn.Parameter):
+                weight = self.value_loss_weight
+            else:
+                weight = self.value_loss_weight
+            outputs.loss = concept_loss + weight * value_loss
         else:
             outputs.loss = concept_loss
 
