@@ -24,6 +24,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
             - abspos: Absolute positions/timestamps
             - segment: Segment IDs
             - age: Patient ages
+            - numeric_value: Numeric values for concepts
 
     Returns:
         List[PatientData]: List of PatientData objects, where each object contains:
@@ -32,6 +33,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
             - abspos (List[float]): List of absolute positions/timestamps
             - segments (List[int]): List of segment IDs
             - ages (List[float]): List of patient ages
+            - values (List[float]): List of numeric values
     """
     patients_data = []
 

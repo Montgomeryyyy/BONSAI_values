@@ -11,17 +11,13 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
-<<<<<<< HEAD
     SEGMENT_COL,
-=======
-    VALUE_NULL_TOKEN,
->>>>>>> 3242bde9 (added numeric embedding layer)
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
 from corebehrt.modules.features.loader import FormattedDataLoader
 from corebehrt.modules.features.tokenizer import EHRTokenizer
-from corebehrt.modules.features.values import ValueCreatorDiscrete
+from corebehrt.modules.features.values import ValueCreatorDiscrete, ValueCreatorContinuous
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function

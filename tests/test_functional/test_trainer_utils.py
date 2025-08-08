@@ -1,82 +1,67 @@
 import unittest
-from corebehrt.modules.setup.config import Config
-from corebehrt.functional.trainer.setup import (
-    replace_steps_with_epochs,
-    convert_epochs_to_steps,
-)
-from corebehrt.functional.trainer.collate import dynamic_padding
+
 import torch
+
+from corebehrt.functional.trainer.collate import dynamic_padding
+from corebehrt.functional.trainer.utils import (
+    convert_epochs_to_steps,
+    replace_steps_with_epochs,
+)
+from corebehrt.constants.data import VALUE_FEAT, VALUE_NULL_TOKEN
 
 
 class TestTrainerUtils(unittest.TestCase):
     def test_convert_epochs_to_steps(self):
         # Test case 1: Basic conversion
+        num_epochs = 2
+        num_patients = 100
+        batch_size = 10
+        expected = 20  # (100 / 10) * 2
+
         self.assertEqual(
-            convert_epochs_to_steps(num_epochs=1, num_patients=100, batch_size=10), 10
+            convert_epochs_to_steps(num_epochs, num_patients, batch_size), expected
         )
 
-        # Test case 2: Multiple epochs
-        self.assertEqual(
-            convert_epochs_to_steps(num_epochs=5, num_patients=1000, batch_size=20), 250
-        )
+        # Test case 2: Edge case with small batch size
+        num_epochs = 1
+        num_patients = 5
+        batch_size = 2
+        expected = 3  # ceil(5 / 2) * 1
 
-        # Test case 3: Fractional result (should be rounded down)
         self.assertEqual(
-            convert_epochs_to_steps(num_epochs=3, num_patients=50, batch_size=8), 18
-        )
-
-        # Test case 4: Edge case with batch size equal to num_patients
-        self.assertEqual(
-            convert_epochs_to_steps(num_epochs=2, num_patients=100, batch_size=100), 2
+            convert_epochs_to_steps(num_epochs, num_patients, batch_size), expected
         )
 
     def test_replace_steps_with_epochs(self):
         # Test case 1: Basic replacement
-        scheduler_cfg = Config({"warmup_epochs": 2, "max_epochs": 10})
-        result = replace_steps_with_epochs(
-            scheduler_cfg, batch_size=5, num_patients=100
-        )
-        self.assertIn("warmup_steps", result)
-        self.assertIn("max_steps", result)
-        self.assertEqual(result["warmup_steps"], 40)
-        self.assertEqual(result["max_steps"], 200)
+        config = {"steps": 100, "num_patients": 1000, "batch_size": 10}
+        expected_epochs = 1  # 100 / (1000 / 10)
 
-        # Test case 2: Mixed keys
-        scheduler_cfg = Config(
-            {"warmup_epochs": 1, "max_steps": 1000, "cooldown_epochs": 3}
-        )
-        result = replace_steps_with_epochs(
-            scheduler_cfg, batch_size=10, num_patients=200
-        )
-        self.assertIn("warmup_steps", result)
-        self.assertIn("max_steps", result)
-        self.assertIn("cooldown_steps", result)
-        self.assertEqual(result["warmup_steps"], 20)
-        self.assertEqual(result["max_steps"], 1000)  # Unchanged
-        self.assertEqual(result["cooldown_steps"], 60)
+        result = replace_steps_with_epochs(config)
+        self.assertEqual(result["epochs"], expected_epochs)
+        self.assertNotIn("steps", result)
 
-        # Test case 3: No epoch keys
-        scheduler_cfg = Config({"warmup_steps": 100, "max_steps": 1000})
-        result = replace_steps_with_epochs(scheduler_cfg, batch_size=5, num_patients=50)
-        self.assertEqual(result, scheduler_cfg)  # Should be unchanged
+        # Test case 2: Edge case with small batch size
+        config = {"steps": 5, "num_patients": 10, "batch_size": 3}
+        expected_epochs = 2  # 5 / ceil(10 / 3) = 5 / 4 = 1.25 -> 2
 
-        # Test case 4: Empty config
-        scheduler_cfg = Config({})
-        result = replace_steps_with_epochs(
-            scheduler_cfg, batch_size=5, num_patients=100
-        )
-        self.assertEqual(result, scheduler_cfg)  # Should be unchanged
+        result = replace_steps_with_epochs(config)
+        self.assertEqual(result["epochs"], expected_epochs)
 
     def test_convert_epochs_to_steps_multiple(self):
+        # Test multiple configurations
         test_cases = [
-            (1, 100, 10, 10),
-            (5, 1000, 20, 250),
-            (3, 50, 8, 18),
-            (2, 100, 100, 2),
+            (1, 100, 10, 10),  # 1 epoch, 100 patients, batch 10 -> 10 steps
+            (2, 100, 10, 20),  # 2 epochs, 100 patients, batch 10 -> 20 steps
+            (1, 50, 10, 5),    # 1 epoch, 50 patients, batch 10 -> 5 steps
+            (3, 150, 15, 30),  # 3 epochs, 150 patients, batch 15 -> 30 steps
         ]
+
         for num_epochs, num_patients, batch_size, expected in test_cases:
             with self.subTest(
-                num_epochs=num_epochs, num_patients=num_patients, batch_size=batch_size
+                num_epochs=num_epochs,
+                num_patients=num_patients,
+                batch_size=batch_size,
             ):
                 self.assertEqual(
                     convert_epochs_to_steps(num_epochs, num_patients, batch_size),
@@ -148,6 +133,55 @@ class TestTrainerUtils(unittest.TestCase):
         )
 
         self.assertTrue(torch.equal(padded_batch["target"], torch.tensor([[1], [0]])))
+
+    def test_dynamic_padding_with_values(self):
+        # Test case: Padding sequences with VALUE_FEAT field
+        batch = [
+            {
+                "concept": torch.tensor([1, 2, 3]),
+                VALUE_FEAT: torch.tensor([1.5, 2.5, 3.5], dtype=torch.float),
+                "attention_mask": torch.tensor([1, 1, 1]),
+                "target": torch.tensor([1]),
+            },
+            {
+                "concept": torch.tensor([1, 2, 3, 4, 5]),
+                VALUE_FEAT: torch.tensor([1.1, 2.2, 3.3, 4.4, 5.5], dtype=torch.float),
+                "attention_mask": torch.tensor([1, 1, 1, 1, 1]),
+                "target": torch.tensor([0]),
+            },
+        ]
+
+        padded_batch = dynamic_padding(batch)
+
+        # Check shapes
+        self.assertEqual(padded_batch["concept"].shape, (2, 5))
+        self.assertEqual(padded_batch[VALUE_FEAT].shape, (2, 5))
+        self.assertEqual(padded_batch["attention_mask"].shape, (2, 5))
+        self.assertEqual(padded_batch["target"].shape, (2, 1))
+
+        # Check padding values for VALUE_FEAT
+        self.assertTrue(
+            torch.equal(
+                padded_batch[VALUE_FEAT][0], 
+                torch.tensor([1.5, 2.5, 3.5, VALUE_NULL_TOKEN, VALUE_NULL_TOKEN], dtype=torch.float)
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                padded_batch[VALUE_FEAT][1], 
+                torch.tensor([1.1, 2.2, 3.3, 4.4, 5.5], dtype=torch.float)
+            )
+        )
+
+        # Check padding values for other fields
+        self.assertTrue(
+            torch.equal(padded_batch["concept"][0], torch.tensor([1, 2, 3, 0, 0]))
+        )
+        self.assertTrue(
+            torch.equal(
+                padded_batch["attention_mask"][0], torch.tensor([1, 1, 1, 0, 0])
+            )
+        )
 
     def test_dynamic_padding_mlm_target(self):
         batch = [
