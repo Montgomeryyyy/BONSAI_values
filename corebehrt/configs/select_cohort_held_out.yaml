@@ -5,7 +5,11 @@ logging:
 paths:
   ### Inputs
   features: ./outputs/features
+<<<<<<< HEAD
   tokenized: ./outputs/tokenized/
+=======
+  tokenized: ./outputs/tokenized
+>>>>>>> 42f7788a (fixed censoring for values)
   initial_pids: pids_held_out.pt # Initial patients to select from [list of pids] (optional)
   outcomes: ./outputs/outcomes/
   # exposure: TEST_CENSOR.csv # Exposure, optional, set to outcome if not provided. For multiple exposures, create a joint exposure file.
