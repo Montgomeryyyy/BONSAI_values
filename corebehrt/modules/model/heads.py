@@ -19,7 +19,6 @@ class FineTuneHead(torch.nn.Module):
             return_embedding=return_embedding,
         )
 
-
 class BiGRU(torch.nn.Module):
     def __init__(self, hidden_size, classifier_hidden_size):
         super().__init__()
