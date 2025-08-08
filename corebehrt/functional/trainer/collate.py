@@ -1,4 +1,5 @@
 import torch
+from corebehrt.constants.data import VALUE_FEAT, VALUE_NULL_TOKEN
 
 
 def dynamic_padding(batch: list) -> dict:
@@ -12,6 +13,7 @@ def dynamic_padding(batch: list) -> dict:
       2) For each sample in the batch:
          - For each key, if the tensor is 1D and matches the sequence length, pad to 'max_len'.
            * If key == 'target' and it's 1D, pad with -100 (MLM style).
+           * If key == VALUE_FEAT, pad with VALUE_NULL_TOKEN.
            * Else pad with 0.
          - If the tensor is 0D (a scalar), skip padding.
       3) Stack along dim=0 to produce a batch dict.
@@ -37,6 +39,9 @@ def dynamic_padding(batch: list) -> dict:
                     # Only do this if target is indeed a sequence (MLM).
                     # If it's binary classification, 'target' will be 0D so we won't enter here.
                     filler = torch.full((diff,), -100, dtype=tensor_field.dtype)
+                elif key == VALUE_FEAT:  # "numeric_value"
+                    # For value features, pad with VALUE_NULL_TOKEN
+                    filler = torch.full((diff,), VALUE_NULL_TOKEN, dtype=tensor_field.dtype)
                 else:
                     # For other sequence fields, pad with 0
                     filler = torch.zeros(diff, dtype=tensor_field.dtype)
@@ -47,6 +52,7 @@ def dynamic_padding(batch: list) -> dict:
     # 3) Stack into a dict of batch tensors
     collated = {}
     for key in batch[0].keys():
-        collated[key] = torch.stack([sample[key] for sample in batch], dim=0)
+        tensors_to_stack = [sample[key] for sample in batch]
+        collated[key] = torch.stack(tensors_to_stack, dim=0)
 
     return collated
