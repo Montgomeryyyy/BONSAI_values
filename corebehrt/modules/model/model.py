@@ -134,6 +134,10 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         super().__init__(config)
         self.loss_fct = nn.CrossEntropyLoss()
         self.head = ModernBertPredictionHead(config)
+        self.val_head = nn.Linear(config.hidden_size, 1)
+        self.val_loss_fct = nn.MSELoss()
+        self.value_loss_weight = getattr(config, "value_loss_weight", 1.0)
+        self.value_null_token = getattr(config, "value_null_token", VALUE_NULL_TOKEN)
         self.decoder = nn.Linear(
             config.hidden_size, config.vocab_size, bias=config.decoder_bias
         )
@@ -143,37 +147,64 @@ class CorebehrtForPretraining(CorebehrtEncoder):
 
     # Inspiration from ModernBertForMaskedLM
     def forward(self, batch: dict, **kwargs):
-        """
-        Forward pass for masked language modeling.
-
-        Args:
-            batch (dict): must contain 'concept', 'segment', 'age', 'abspos';
-                          optional 'target' for labels (B, L).
-            **kwargs: Additional arguments to pass to the encoder forward method
-
-        Returns:
-            BaseModelOutput: with logits and optional loss/labels if targets provided.
-        """
         outputs = super().forward(batch, **kwargs)
-        last_hidden_state = outputs[0]
+        last_hidden_state = outputs[0]  # (B, L, H)
 
-        labels = batch.get(TARGET)
+        # === Concept Prediction ===
+        labels = batch.get(TARGET)                     # (B, L), masked tokens only
+        value_targets = batch.get(VALUE_FEAT)          # (B, L), values or VALUE_NULL_TOKEN
+
         if self.sparse_prediction and labels is not None:
-            # flatten labels and output first
+            # Flatten and filter non-masked tokens
             labels = labels.view(-1)
             last_hidden_state = last_hidden_state.view(labels.shape[0], -1)
-
-            # then filter out the non-masked tokens
             mask_tokens = labels != self.sparse_pred_ignore_index
             last_hidden_state = last_hidden_state[mask_tokens]
             labels = labels[mask_tokens]
 
-        logits = self.decoder(self.head(last_hidden_state))
+        # Predict concepts
+        logits = self.decoder(self.head(last_hidden_state))  # (N, vocab_size)
         outputs.logits = logits
 
         if labels is not None:
-            outputs.loss = self.get_loss(logits, labels)
+            concept_loss = self.get_loss(logits, labels)
+            outputs.concept_loss = concept_loss
             outputs.labels = labels
+        else:
+            concept_loss = torch.tensor(0.0, device=last_hidden_state.device)
+
+        # === Value Prediction ===
+        predicted_values = self.val_head(last_hidden_state).squeeze(-1)  # (N,) if flattened
+
+        value_loss = torch.tensor(0.0, device=last_hidden_state.device)
+        if value_targets is not None:
+            if self.sparse_prediction:
+                value_targets = value_targets.view(-1)
+                value_targets = value_targets[mask_tokens]  # same mask as concepts
+                value_mask = (value_targets != self.value_null_token)
+
+                if value_mask.any():
+                    value_loss = self.val_loss_fct(
+                        predicted_values[value_mask], value_targets[value_mask]
+                    )
+            else:
+                # Not sparse: use full shape (B, L)
+                pred_vals = self.val_head(last_hidden_state).squeeze(-1)  # (B, L)
+                value_mask = (value_targets != self.value_null_token)
+                pred_vals = pred_vals[value_mask]
+                target_vals = value_targets[value_mask]
+
+                if target_vals.numel() > 0:
+                    value_loss = self.val_loss_fct(pred_vals, target_vals)
+
+            outputs.value_loss = value_loss
+            outputs.predicted_values = predicted_values
+
+        # === Final loss ===
+        if labels is not None and value_targets is not None:
+            outputs.loss = concept_loss + self.value_loss_weight * value_loss
+        else:
+            outputs.loss = concept_loss
 
         return outputs
 

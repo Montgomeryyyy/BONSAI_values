@@ -44,6 +44,7 @@ model:
   age_shift: -50 # center around 0
   abspos_shift: -90_000 # 0 will be around 2015
   value_embedding_mode: "concat"
+  value_loss_weight: 1.0
   
   is_causal: false  
   
