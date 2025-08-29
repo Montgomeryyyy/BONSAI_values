@@ -118,7 +118,6 @@ def get_related_concepts(
         else:
             # If no conditions specified, use probability
             should_generate_lab = np.random.random() < info["prob"]
-
         if should_generate_lab:
             # Generate value based on the selected condition
             value = generate_lab_value(lab_name, condition)
@@ -144,7 +143,6 @@ def generate_lab_concepts(
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
     """
     records = []
-
     # Create a deterministic assignment of conditions
     # First n_high_patients get "high", next n_low_patients get "low"
     n_patients = len(pids_list)
@@ -170,7 +168,6 @@ def generate_lab_concepts(
     for pid in pids_list:
         # Get the pre-assigned condition for this patient
         condition = pid_to_condition[pid]
-
         # For each base concept in CONCEPT_RELATIONSHIPS
         for base_concept, info in CONCEPT_RELATIONSHIPS.items():
             # Determine if this patient gets this base concept

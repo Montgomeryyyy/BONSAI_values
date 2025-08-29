@@ -1,9 +1,5 @@
 import torch
-<<<<<<< HEAD
 from corebehrt.constants.data import VALUE_FEAT
-=======
-from corebehrt.constants.data import VALUE_FEAT, VALUE_NULL_TOKEN
->>>>>>> 42f7788a (fixed censoring for values)
 
 
 def dynamic_padding(batch: list) -> dict:
@@ -44,13 +40,8 @@ def dynamic_padding(batch: list) -> dict:
                     # If it's binary classification, 'target' will be 0D so we won't enter here.
                     filler = torch.full((diff,), -100, dtype=tensor_field.dtype)
                 elif key == VALUE_FEAT:  # "numeric_value"
-<<<<<<< HEAD
                     # For value features, pad with nan
                     filler = torch.full((diff,), float("nan"), dtype=tensor_field.dtype)
-=======
-                    # For value features, pad with VALUE_NULL_TOKEN
-                    filler = torch.full((diff,), VALUE_NULL_TOKEN, dtype=tensor_field.dtype)
->>>>>>> 42f7788a (fixed censoring for values)
                 else:
                     # For other sequence fields, pad with 0
                     filler = torch.zeros(diff, dtype=tensor_field.dtype)

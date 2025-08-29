@@ -198,6 +198,7 @@ class SeparateContinuousEmbedding(nn.Module):
 
         elif self.value_embedding_mode == "concat":
             self.concat_proj = nn.Linear(2 * hidden_size, hidden_size)
+        
 
     def forward(self, values: torch.Tensor, concept_embeds: torch.Tensor) -> torch.Tensor:
         mask = (~torch.isnan(values)).float().unsqueeze(-1)
@@ -212,6 +213,8 @@ class SeparateContinuousEmbedding(nn.Module):
             combined = torch.cat([concept_embeds, value_embed], dim=-1)
             return self.concat_proj(combined) * mask
 
+        elif self.mode == "linear":
+            return value_embed 
         else:
             raise ValueError(f"Unknown value_embedding_mode: {self.value_embedding_mode}")
 
