@@ -145,6 +145,7 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
+<<<<<<< HEAD
             # Determine value type and segment creation strategy
             features_cfg = cfg.get("features", {})
             value_type = features_cfg.get("values", {}).get("value_type", None)
@@ -171,6 +172,10 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 logger.warning("No value type found, dropping numeric_value column")
 
             # Create features
+=======
+            concepts = create_row_id(concepts)
+            concepts = handle_numeric_values(concepts, cfg.get("features"))
+>>>>>>> 9567b205 (fix sequences)
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(
                 concepts, use_admission_ids_for_segments=make_adm_segments
@@ -324,6 +329,7 @@ def handle_numeric_values(
         return ValueCreator.add_values(
             concepts,
         )
+<<<<<<< HEAD
         # null_token = getattr(features_cfg.values, "null_token", VALUE_NULL_TOKEN)
         # return ValueCreator.add_null_token(concepts, null_token)
 >>>>>>> d66ba95c (combined seq)
@@ -352,6 +358,12 @@ def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
     return concepts
 =======
 def create_segments(concepts: pd.DataFrame) -> pd.DataFrame:
+=======
+
+    return concepts.drop(columns=["numeric_value"])
+
+def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
+>>>>>>> 9567b205 (fix sequences)
     """Assign segment numbers to each row within each PID group."""
     concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
     return concepts

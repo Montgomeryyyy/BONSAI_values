@@ -221,6 +221,7 @@ def sort_features(concepts: pd.DataFrame) -> pd.DataFrame:
     else:
         concepts = concepts.sort_values([PID_COL, ABSPOS_COL])
 
+<<<<<<< HEAD
     return concepts
 
 
@@ -427,3 +428,6 @@ def assign_segments_to_death(df: pd.DataFrame) -> pd.DataFrame:
         df[CONCEPT_COL] != DEATH_CODE, df["max_segment"]
     )
     return df.drop(columns=["max_segment"])
+=======
+    return concepts
+>>>>>>> 9567b205 (fix sequences)
