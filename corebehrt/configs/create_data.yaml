@@ -3,7 +3,11 @@ logging:
   path: ./outputs/logs
 
 paths:
+<<<<<<< HEAD
   data: ./example_data/correlated_MEDS_data # use lab_correlated_MEDS_data for lab correlated data
+=======
+  data: ./example_data/lab_correlated_MEDS_data
+>>>>>>> d66ba95c (combined seq)
   tokenized: ./outputs/tokenized
   features: ./outputs/features
   # optional

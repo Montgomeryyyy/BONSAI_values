@@ -151,7 +151,6 @@ def _append_predict_token(
     """
     Appends a predict token to the patient's data.
     """
-    from corebehrt.constants.data import VALUE_NULL_TOKEN
     
     patient.concepts.append(predict_token_id)
     patient.abspos.append(float(censor_date))
@@ -160,7 +159,7 @@ def _append_predict_token(
     )  # Use 0 as default segment if segments list is empty
     age_in_years = float((censor_date - patient.abspos[0]) / (365.25 * 24))
     patient.ages.append(age_in_years)
-    patient.values.append(VALUE_NULL_TOKEN)  # Predict token has no associated value
+    patient.values.append(float('nan'))  # Predict token has no associated value
     return patient
 
 

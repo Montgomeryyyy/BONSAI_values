@@ -39,16 +39,6 @@ def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:
     return concepts
 
 
-def create_values(concepts: pd.DataFrame) -> pd.DataFrame:
-    """
-    Create values for each row in concepts
-    Parameters:
-        concepts: concepts with 'VALUE_COL' column.
-    Returns:
-        concepts with a new 'numeric_value' column
-    """
-    concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
-    return concepts
 
 def create_age_in_years(concepts: pd.DataFrame) -> pd.DataFrame:
     """
@@ -353,7 +343,8 @@ def _assign_explicit_admission_ids(
 
         current_admission_id, current_outside_id, last_timestamp = patient_states[pid]
 
-        if code.startswith(ADMISSION):
+        # Check if code is a string and starts with admission/discharge, otherwise treat as regular event
+        if isinstance(code, str) and code.startswith(ADMISSION):
             # Start new admission
             current_admission_id = get_adm_id_func()
             admission_ids[i] = current_admission_id
@@ -361,7 +352,7 @@ def _assign_explicit_admission_ids(
             current_outside_id = None
             last_timestamp = None
 
-        elif code.startswith(DISCHARGE):
+        elif isinstance(code, str) and code.startswith(DISCHARGE):
             # End current admission
             if current_admission_id is not None:
                 admission_ids[i] = current_admission_id

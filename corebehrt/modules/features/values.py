@@ -101,6 +101,18 @@ class ValueCreatorDiscrete:
         concepts[VALUE_COL] = concepts[VALUE_COL].fillna(null_token)
         return concepts
 
+
+    @staticmethod
+    def add_values(concepts: pd.DataFrame) -> pd.DataFrame:
+        concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
+        concepts["index"] = concepts.index
+        concepts.loc[:, "order"] = 0
+        values = concepts.dropna(subset=[VALUE_COL]).copy()
+        values.loc[:, "code"] = values[VALUE_COL]
+        values.loc[:, "order"] = 1
+        concatted = pd.concat([concepts, values])
+        return concatted.drop(columns=[VALUE_COL], axis=1)
+
     @staticmethod
     def bin_results(
         concepts: pd.DataFrame,

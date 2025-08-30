@@ -19,7 +19,6 @@ DEFAULT_VOCABULARY = {
     MASK_TOKEN: 4,
     VAL_TOKEN: 5,
 }
-VALUE_NULL_TOKEN = -1
 
 ### Columns ###
 PID_COL = "subject_id"
@@ -44,15 +43,14 @@ BIRTH_CODE = "DOB"
 
 ### Schema ###
 SCHEMA = {
-    "subject_id": "int64",
-    "age": "float32",
-    "abspos": "float64",
-    "segment": "int32",
-    "numeric_value": "float32",
+    PID_COL: "int64",
+    AGE_COL: "float32",
+    ABSPOS_COL: "float64",
+    SEGMENT_COL: "int32",
 }
 
-FEATURES_SCHEMA = {**SCHEMA, "code": "str"}
-TOKENIZED_SCHEMA = {**SCHEMA, "code": "int32"}
+FEATURES_SCHEMA = {**SCHEMA, CONCEPT_COL: "str"}
+TOKENIZED_SCHEMA = {**SCHEMA, CONCEPT_COL: "int32", VALUE_COL: "float64"}
 
 ### Folds and Splits###
 TRAIN_KEY = "train"

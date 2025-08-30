@@ -26,7 +26,7 @@ from corebehrt.constants.data import (
     SEGMENT_FEAT,
     TARGET,
     VALUE_FEAT,
-    VALUE_NULL_TOKEN,
+    VAL_TOKEN,
 )
 from corebehrt.constants.model import (
     TIME2VEC_ABSPOS_SCALE,
@@ -64,10 +64,9 @@ class CorebehrtEncoder(ModernBertModel):
             age_shift=getattr(config, "age_shift", TIME2VEC_AGE_SHIFT),
             abspos_scale=getattr(config, "abspos_scale", TIME2VEC_ABSPOS_SCALE),
             abspos_shift=getattr(config, "abspos_shift", TIME2VEC_ABSPOS_SHIFT),
-            value_null_token=getattr(config, "value_null_token", VALUE_NULL_TOKEN),
-            value_embedding_mode=getattr(config, "value_embedding_mode", "concat")
         )
         self.is_causal = getattr(config, "is_causal", False)
+        self.val_token_id = DEFAULT_VOCABULARY[VAL_TOKEN]
 
     def forward(self, batch: dict, **kwargs):
         """
@@ -93,10 +92,10 @@ class CorebehrtEncoder(ModernBertModel):
 
         inputs_embeds = self.embeddings(
             input_ids=batch[CONCEPT_FEAT],
-            values=batch[VALUE_FEAT],
             segments=batch[SEGMENT_FEAT],
             age=batch[AGE_FEAT],
             abspos=batch[ABSPOS_FEAT],
+            values=batch[VALUE_FEAT],
         )
 
         return super().forward(
@@ -153,7 +152,6 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             self.value_loss_weight = value_loss_weight
             logging.info(f"Value loss weight is fixed at {value_loss_weight}")
             
-        self.value_null_token = getattr(config, "value_null_token", VALUE_NULL_TOKEN)
         self.decoder = nn.Linear(
             config.hidden_size, config.vocab_size, bias=config.decoder_bias
         )
@@ -168,7 +166,7 @@ class CorebehrtForPretraining(CorebehrtEncoder):
 
         # === Concept Prediction ===
         labels = batch.get(TARGET)                     # (B, L), masked tokens only
-        value_targets = batch.get(VALUE_FEAT)          # (B, L), values or VALUE_NULL_TOKEN
+        value_targets = batch.get(VALUE_FEAT)          # (B, L), values
 
         if self.sparse_prediction and labels is not None:
             # Flatten and filter non-masked tokens
@@ -183,38 +181,63 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         outputs.logits = logits
 
         if labels is not None:
-            concept_loss = self.get_loss(logits, labels)
+            # Filter out [VAL] tokens from concept prediction
+            # Only predict concepts for non-VAL positions
+            non_val_mask = (labels != self.val_token_id)
+            
+            if non_val_mask.any():
+                # Only compute loss for non-VAL tokens
+                concept_logits = logits[non_val_mask]
+                concept_labels = labels[non_val_mask]
+                concept_loss = self.get_loss(concept_logits, concept_labels)
+            else:
+                concept_loss = torch.tensor(0.0, device=last_hidden_state.device)
+            
             outputs.concept_loss = concept_loss
             outputs.labels = labels
         else:
             concept_loss = torch.tensor(0.0, device=last_hidden_state.device)
 
         # === Value Prediction ===
-        predicted_values = self.val_head(last_hidden_state).squeeze(-1)  # (N,) if flattened
-
+        # Only predict values for positions that have VAL tokens
+        is_val_token = (labels == self.val_token_id) if labels is not None else None
+        
         value_loss = torch.tensor(0.0, device=last_hidden_state.device)
-        if value_targets is not None:
+        if value_targets is not None and is_val_token is not None:
             if self.sparse_prediction:
-                value_targets = value_targets.view(-1)
-                value_targets = value_targets[mask_tokens]  # same mask as concepts
-                value_mask = (value_targets != self.value_null_token)
-
-                if value_mask.any():
-                    value_loss = self.val_loss_fct(
-                        predicted_values[value_mask], value_targets[value_mask]
-                    )
+                # In sparse mode, we already have the masked positions
+                # Check which of these are VAL tokens
+                val_positions = is_val_token
+                if val_positions.any():
+                    # Get the corresponding value targets for VAL positions
+                    val_targets = value_targets[val_positions]
+                    val_mask = ~torch.isnan(val_targets)  # Remove NaN values
+                    
+                    if val_mask.any():
+                        # Predict values only for [VAL] tokens with valid targets
+                        val_hidden = last_hidden_state[val_positions][val_mask]
+                        predicted_values = self.val_head(val_hidden).squeeze(-1)
+                        target_values = val_targets[val_mask]
+                        
+                        value_loss = self.val_loss_fct(predicted_values, target_values)
+                        outputs.predicted_values = predicted_values
             else:
                 # Not sparse: use full shape (B, L)
-                pred_vals = self.val_head(last_hidden_state).squeeze(-1)  # (B, L)
-                value_mask = (value_targets != self.value_null_token)
-                pred_vals = pred_vals[value_mask]
-                target_vals = value_targets[value_mask]
-
-                if target_vals.numel() > 0:
-                    value_loss = self.val_loss_fct(pred_vals, target_vals)
+                # Find [VAL] token positions in the full sequence
+                val_positions = (labels == self.val_token_id)
+                if val_positions.any():
+                    val_targets = value_targets[val_positions]
+                    val_mask = ~torch.isnan(val_targets)
+                    
+                    if val_mask.any():
+                        val_hidden = last_hidden_state[val_positions][val_mask]
+                        predicted_values = self.val_head(val_hidden).squeeze(-1)
+                        target_values = val_targets[val_mask]
+                        
+                        value_loss = self.val_loss_fct(predicted_values, target_values)
+                        outputs.predicted_values = predicted_values
 
             outputs.value_loss = value_loss
-            outputs.predicted_values = predicted_values
 
         # === Final loss ===
         if labels is not None and value_targets is not None:
