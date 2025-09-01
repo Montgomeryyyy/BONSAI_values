@@ -11,6 +11,7 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
+    SEGMENT_COL
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -107,6 +108,7 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
+            concepts = create_row_id(concepts)
             concepts = handle_numeric_values(concepts, cfg.get("features"))
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(concepts)
@@ -233,3 +235,8 @@ def handle_numeric_values(
         )
 
     return concepts.drop(columns=["numeric_value"])
+
+def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
+    """Assign segment numbers to each row within each PID group."""
+    concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
+    return concepts

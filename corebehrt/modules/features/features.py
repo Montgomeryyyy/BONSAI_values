@@ -34,8 +34,10 @@ class FeatureCreator:
         )  # ! do not touch this: including additional columns here might cause loss of events.
         features = sort_features(features)
 
-        features = create_segments(features)
-        features = features.drop(columns=["admission_id", "time", "birthdate"])
+        # features = create_segments(features)
+        features = features.drop(columns=["time", "birthdate"])
         features[PID_COL] = features[PID_COL].astype(int)
+
+        print(features.head(50))
 
         return features, patient_info
