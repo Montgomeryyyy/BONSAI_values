@@ -164,6 +164,7 @@ def create_background(concepts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     bg_mask = concepts[TIMESTAMP_COL].isna()
     concepts.loc[bg_mask, TIMESTAMP_COL] = concepts.loc[bg_mask, BIRTHDATE_COL]
     concepts.loc[bg_mask, CONCEPT_COL] = "BG_" + concepts.loc[bg_mask, CONCEPT_COL]
+    concepts.loc[bg_mask, SEGMENT_COL] = 0
 
     # Use boolean masking for admission/discharge rows
     adm_mask = concepts[CONCEPT_COL].str.contains(ADMISSION_CODE, na=False) | concepts[
