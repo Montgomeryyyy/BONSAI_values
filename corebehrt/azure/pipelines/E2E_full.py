@@ -4,7 +4,7 @@ E2E_full pipeline implementation.
 
 from corebehrt.azure.pipelines.base import PipelineMeta, PipelineArg
 
-E2E_FULL = PipelineMeta(
+E2E_full = PipelineMeta(
     name="E2E_full",
     help="Run the end-to-end pipeline with held out data.",
     inputs=[
