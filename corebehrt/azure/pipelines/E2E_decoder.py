@@ -4,8 +4,8 @@ E2E_decoder pipeline implementation.
 
 from corebehrt.azure.pipelines.base import PipelineMeta, PipelineArg
 
-E2E_decoder = PipelineMeta(
-    name="E2E_decoder",
+E2E_DECODER = PipelineMeta(
+    name="E2E_DECODER",
     help="Run the end-to-end pipeline with held out data.",
     inputs=[
         PipelineArg(name="data", help="Path to the raw input data.", required=True),
