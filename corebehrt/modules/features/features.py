@@ -38,6 +38,4 @@ class FeatureCreator:
         features = features.drop(columns=["time", "birthdate"])
         features[PID_COL] = features[PID_COL].astype(int)
 
-        print(features.head(50))
-
         return features, patient_info

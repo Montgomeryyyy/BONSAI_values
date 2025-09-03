@@ -46,7 +46,77 @@ def main_evaluate(config_path):
     )
     test_data = PatientDataset(loaded_data)
     outcomes = test_data.get_outcomes()
-    vocab = load_vocabulary(cfg.paths.test_data_dir)
+    
+    # Load vocabulary directly from the model's saved vocabulary file
+    # The model was trained with this vocabulary, so we need to use it for decoding
+    print(f"\n=== VOCABULARY LOADING DEBUG ===")
+    print(f"Looking for vocabulary in: {cfg.paths.model}")
+    
+    # Check what files exist in the model directory
+    import os
+    model_files = os.listdir(cfg.paths.model)
+    print(f"Files in model directory: {model_files}")
+    
+    # Try different possible vocabulary file names
+    possible_vocab_files = [
+        "vocabulary.pt",
+        "vocab.pt", 
+        "tokenizer.pt",
+        "vocab.json",
+        "tokenizer.json"
+    ]
+    
+    vocab = None
+    vocab_source = None
+    
+    for vocab_file in possible_vocab_files:
+        vocab_path = join(cfg.paths.model, vocab_file)
+        if os.path.exists(vocab_path):
+            print(f"Found vocabulary file: {vocab_file}")
+            try:
+                if vocab_file.endswith('.pt'):
+                    vocab = torch.load(vocab_path)
+                elif vocab_file.endswith('.json'):
+                    import json
+                    with open(vocab_path, 'r') as f:
+                        vocab = json.load(f)
+                vocab_source = vocab_path
+                print(f"✓ Successfully loaded vocabulary from {vocab_file}")
+                break
+            except Exception as e:
+                print(f"✗ Failed to load {vocab_file}: {e}")
+                continue
+    
+    if vocab is None:
+        # Fallback to load_vocabulary function
+        from corebehrt.functional.io_operations.load import load_vocabulary
+        print("⚠ No vocabulary file found, trying load_vocabulary function...")
+        vocab = load_vocabulary(cfg.paths.model)
+        vocab_source = "load_vocabulary function"
+    
+    if vocab is None:
+        raise ValueError("Could not load vocabulary from any source!")
+    
+    print(f"Vocabulary loaded from: {vocab_source}")
+    
+    # Create reverse vocabulary mapping (id -> token) for decoding
+    # The vocabulary is currently token -> id, but we need id -> token for decoding
+    reverse_vocab = {int(v): k for k, v in vocab.items()}
+    print(f"Created reverse vocabulary mapping (id -> token)")
+    print(f"Reverse vocabulary size: {len(reverse_vocab)}")
+    
+    # Test the reverse mapping with some known tokens
+    test_tokens = [0, 1, 2, 5, 681]  # PAD, CLS, SEP, BOS, DE11
+    print(f"Testing reverse mapping:")
+    for token_id in test_tokens:
+        if token_id in reverse_vocab:
+            print(f"  {token_id} -> '{reverse_vocab[token_id]}'")
+        else:
+            print(f"  {token_id} -> NOT FOUND")
+    
+    # Use reverse_vocab for decoding - this should be id -> token
+    vocab = reverse_vocab
+    
     test_dataset = DecoderDataset(test_data.patients, vocab)
     test_pids = test_data.get_pids()
     folds = torch.load(join(cfg.paths.model, FOLDS_FILE), weights_only=False)
@@ -60,23 +130,50 @@ def main_evaluate(config_path):
     print(f"\n=== VOCABULARY DEBUG ===")
     print(f"Vocabulary size: {len(vocab)}")
     print(f"Target outcomes: {target_outcomes}")
+    print(f"Vocabulary loaded from: {cfg.paths.model}")
     
-    # Check if target outcomes are in vocabulary
+    # Check if target outcomes are in vocabulary (now check by token ID)
     for outcome in target_outcomes:
+        # First check if the outcome string exists in the original vocabulary
         if outcome in vocab:
             print(f"✓ Outcome '{outcome}' found in vocabulary with ID: {vocab[outcome]}")
         else:
-            print(f"✗ Outcome '{outcome}' NOT found in vocabulary!")
+            # Check if it's a numeric ID
+            try:
+                outcome_id = int(outcome)
+                if outcome_id in vocab:
+                    print(f"✓ Outcome ID {outcome_id} found in vocabulary with token: '{vocab[outcome_id]}'")
+                else:
+                    print(f"✗ Outcome '{outcome}' NOT found in vocabulary!")
+            except ValueError:
+                print(f"✗ Outcome '{outcome}' NOT found in vocabulary!")
     
     # Show some sample vocabulary entries
     print(f"\nSample vocabulary entries:")
     sample_entries = list(vocab.items())[:10]
-    for token, token_id in sample_entries:
-        print(f"  '{token}' -> {token_id}")
+    for token_id, token in sample_entries:
+        print(f"  {token_id} -> '{token}'")
     
     # Check for any tokens that might be outcomes
-    outcome_like_tokens = [token for token in vocab.keys() if token.startswith('DE') or token.startswith('DI')]
+    outcome_like_tokens = [token for token in vocab.values() if token.startswith('DE') or token.startswith('DI') or token.startswith('S/')]
     print(f"\nOutcome-like tokens in vocabulary: {outcome_like_tokens[:10]}...")
+    
+    # Debug: Check if the vocabulary is actually a dict and has the right structure
+    print(f"\nVocabulary type: {type(vocab)}")
+    if isinstance(vocab, dict):
+        print(f"Vocabulary keys type: {type(list(vocab.keys())[0]) if vocab else 'N/A'}")
+        print(f"Vocabulary values type: {type(list(vocab.values())[0]) if vocab else 'N/A'}")
+        
+        # Verify we have the correct structure (id -> token)
+        if vocab and isinstance(list(vocab.keys())[0], int):
+            print("✓ Vocabulary has correct structure: id -> token")
+        else:
+            print("⚠ Vocabulary structure issue detected!")
+            # Force the correct structure
+            if vocab and isinstance(list(vocab.keys())[0], str):
+                print("Converting string keys to integer keys...")
+                vocab = {int(k): v for k, v in vocab.items()}
+                print("✓ Fixed vocabulary structure")
 
     # Load model from the first fold
     modelmanager_trained = ModelManager(cfg, fold=None)

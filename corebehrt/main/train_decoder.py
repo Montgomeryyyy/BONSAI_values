@@ -15,7 +15,7 @@ from corebehrt.modules.setup.config import load_config
 from corebehrt.modules.setup.directory import DirectoryPreparer
 from corebehrt.modules.setup.initializer import Initializer
 from corebehrt.modules.trainer.trainer import EHRTrainer
-from corebehrt.constants.paths import PREPARED_TRAIN_PATIENTS, PREPARED_VAL_PATIENTS, FOLDS_FILE
+from corebehrt.constants.paths import PREPARED_TRAIN_PATIENTS, PREPARED_VAL_PATIENTS, FOLDS_FILE, VOCABULARY_FILE
 from corebehrt.constants.data import TRAIN_KEY, VAL_KEY
 
 CONFIG_PATH = "./corebehrt/configs/train_decoder.yaml"
@@ -42,6 +42,7 @@ def main_train(config_path):
         torch.load(join(cfg.paths.prepared_data, PREPARED_VAL_PATIENTS))
     )
     vocab = load_vocabulary(cfg.paths.prepared_data)
+    torch.save(vocab, join(cfg.paths.model, VOCABULARY_FILE))
 
     # Assign labels to each patient and save pids
     train_data.assign_labels()
