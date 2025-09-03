@@ -5,7 +5,6 @@ from corebehrt.functional.features.creators import (
     create_abspos,
     create_age_in_years,
     create_background,
-    create_segments,
     sort_features,
 )
 from corebehrt.functional.features.exclude import exclude_event_nans
@@ -37,7 +36,5 @@ class FeatureCreator:
         # features = create_segments(features)
         features = features.drop(columns=["time", "birthdate"])
         features[PID_COL] = features[PID_COL].astype(int)
-
-        print(features.head(50))
 
         return features, patient_info
