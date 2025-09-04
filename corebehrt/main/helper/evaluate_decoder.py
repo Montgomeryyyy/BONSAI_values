@@ -118,12 +118,42 @@ def generate_sequences(
             # Store generated sequences with metadata
             batch_size = batch["concept"].size(0)
             for i in range(batch_size):
+                # Post-process generated sequence to remove excessive padding
+                generated_concepts = generated_outputs['concepts'][i].cpu().tolist()
+                
+                # Find the first EOS token or excessive padding
+                eos_token_id = 6  # <|EOS|> token ID
+                pad_token_id = 0  # [PAD] token ID
+                
+                # Look for EOS token first
+                eos_pos = -1
+                for pos, token_id in enumerate(generated_concepts):
+                    if token_id == eos_token_id:
+                        eos_pos = pos
+                        break
+                
+                # If no EOS, look for excessive padding (more than 3 consecutive PAD tokens)
+                if eos_pos == -1:
+                    consecutive_pad = 0
+                    for pos, token_id in enumerate(generated_concepts):
+                        if token_id == pad_token_id:
+                            consecutive_pad += 1
+                            if consecutive_pad > 3:  # More than 3 consecutive PADs
+                                eos_pos = pos - consecutive_pad
+                                break
+                        else:
+                            consecutive_pad = 0
+                
+                # Trim the sequence
+                if eos_pos > 0:
+                    generated_concepts = generated_concepts[:eos_pos]
+                
                 seq_data = {
                     'patient_index': batch_idx * cfg.trainer_args.get('batch_size', 32) + i,
                     'original_sequence': batch["concept"][i].cpu().tolist(),
-                    'generated_sequence': generated_outputs['concepts'][i].cpu().tolist(),
+                    'generated_sequence': generated_concepts,
                     'original_length': batch["concept"][i].size(0),
-                    'generated_length': generated_outputs['concepts'][i].size(0),
+                    'generated_length': len(generated_concepts),
                 }
                 
                 # Only include additional embeddings if predict_all_embeddings is True

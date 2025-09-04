@@ -134,9 +134,15 @@ def main_evaluate(config_path):
     
     # Check if target outcomes are in vocabulary (now check by token ID)
     for outcome in target_outcomes:
-        # First check if the outcome string exists in the original vocabulary
-        if outcome in vocab:
-            print(f"✓ Outcome '{outcome}' found in vocabulary with ID: {vocab[outcome]}")
+        # Since we have id -> token mapping, search in the values (tokens)
+        if outcome in vocab.values():
+            # Find the ID for this outcome
+            outcome_id = None
+            for token_id, token in vocab.items():
+                if token == outcome:
+                    outcome_id = token_id
+                    break
+            print(f"✓ Outcome '{outcome}' found in vocabulary with ID: {outcome_id}")
         else:
             # Check if it's a numeric ID
             try:

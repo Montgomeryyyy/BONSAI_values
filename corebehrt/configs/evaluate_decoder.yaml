@@ -15,10 +15,16 @@ test_batch_size: 128
 sequence_generation:
   max_length: 50  # Maximum length of generated sequences
   do_sample: true  # Enable sampling instead of greedy decoding
-  temperature: 0.8  # Sampling temperature (lower = more focused, higher = more random)
-  top_k: 50  # Top-k sampling parameter
-  top_p: 0.9  # Top-p (nucleus) sampling parameter
-  repetition_penalty: 1.1  # Penalty for repeating tokens
+  temperature: 0.6  # Lower temperature for more focused generation (was 0.8)
+  top_k: 20  # Lower top-k for more focused sampling (was 50)
+  top_p: 0.8  # Lower top-p for more focused sampling (was 0.9)
+  repetition_penalty: 1.2  # Increase repetition penalty (was 1.1)
+  no_repeat_ngram_size: 3  # Prevent repeating 3-grams
+  early_stopping: true  # Stop when EOS token is generated
+  pad_token_id: 0  # Explicitly set padding token ID
+  eos_token_id: 6  # Explicitly set EOS token ID (<|EOS|>)
+  length_penalty: 1.0  # Penalize longer sequences
+  num_beams: 1  # Use greedy/sampling instead of beam search for speed
 
 sequence_evaluation:
   outcomes: ['DE11']
