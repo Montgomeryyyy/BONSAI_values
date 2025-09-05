@@ -12,6 +12,7 @@ from corebehrt.constants.data import (
     CONCEPT_COL,
     TIMESTAMP_COL,
     VALUE_NULL_TOKEN,
+    SEGMENT_COL,
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -107,12 +108,15 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
+            concepts = create_row_id(concepts)
             concepts = handle_numeric_values(concepts, cfg.get("features"))
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(concepts)
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
+
+            print(features.head(20))
 
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
@@ -220,19 +224,10 @@ def handle_numeric_values(
     if features_cfg and "values" in features_cfg:
         null_token = getattr(features_cfg.values, "null_token", VALUE_NULL_TOKEN)
         return ValueCreator.add_null_token(concepts, null_token)
-        # TODO: add both support for discrete and continuous values
-        # num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
-        # add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
-        # separator_regex = features_cfg.values.value_creator_kwargs.get(
-        #     "separator_regex", None
-        # )
-        # if separator_regex is not None and not is_valid_regex(separator_regex):
-        #     raise ValueError(f"Invalid regex: {separator_regex}")
-        # return ValueCreator.bin_results(
-        #     concepts,
-        #     num_bins=num_bins,
-        #     add_prefix=add_prefix,
-        #     separator_regex=separator_regex,
-        # )
 
     return concepts.drop(columns=["numeric_value"])
+
+def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
+    """Assign segment numbers to each row within each PID group."""
+    concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
+    return concepts

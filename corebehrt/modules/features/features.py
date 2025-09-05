@@ -5,7 +5,6 @@ from corebehrt.functional.features.creators import (
     create_abspos,
     create_age_in_years,
     create_background,
-    create_segments,
     sort_features,
     create_values,
 )
@@ -36,8 +35,7 @@ class FeatureCreator:
         )  # ! do not touch this: including additional columns here might cause loss of events.
         features = sort_features(features)
 
-        features = create_segments(features)
-        features = features.drop(columns=["admission_id", "time", "birthdate"])
+        features = features.drop(columns=["time", "birthdate"])
         features[PID_COL] = features[PID_COL].astype(int)
 
         return features, patient_info
