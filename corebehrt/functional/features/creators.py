@@ -15,13 +15,9 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
-<<<<<<< HEAD
     ADMISSION_ID_COL,
     ADMISSION,
     DISCHARGE,
-=======
-    VALUE_COL,
->>>>>>> c73ff1e5 (added numeric embedding layer)
 )
 from corebehrt.functional.utils.time import get_hours_since_epoch
 from corebehrt.functional.features.normalize import normalize_segments_series
