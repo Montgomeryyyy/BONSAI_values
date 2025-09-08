@@ -143,10 +143,15 @@ class ContinuousEmbedding(nn.Module):
     def __init__(self, hidden_size: int):
         super().__init__()
         self.hidden_size = hidden_size
-        self.linear_layer = nn.Linear(1, hidden_size)
+        # self.linear_layer = nn.Linear(1, hidden_size)
+        self.value_layer = nn.Sequential(
+            nn.Linear(1, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size)
+        )
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
-        value_embed = self.linear_layer(values.unsqueeze(-1))  # (B, T, H)
+        value_embed = self.value_layer(values.unsqueeze(-1))  # (B, T, H)
         return value_embed
 
 class Time2Vec(torch.nn.Module):
