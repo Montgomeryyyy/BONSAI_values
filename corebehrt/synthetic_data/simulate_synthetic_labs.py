@@ -11,8 +11,8 @@ import argparse
 from pathlib import Path
 
 # Default parameters
-PATIENTS_INFO_PATH = "../../data/vals/patient_infos/patient_info_10000n.parquet"
-DEFAULT_WRITE_DIR = "../../data/vals/synthetic_data/10000n/"
+PATIENTS_INFO_PATH = "../../../data/vals/patient_infos/patient_info_10000n.parquet"
+DEFAULT_WRITE_DIR = "../../../data/vals/synthetic_data/10000n/"
 SAVE_NAME = "bn_labs_n10000_50p_1unq"
 
 # Define lab value ranges and their probabilities for different conditions
