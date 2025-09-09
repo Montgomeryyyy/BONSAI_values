@@ -82,11 +82,13 @@ class EhrEmbeddings(nn.Module):
         inputs_embeds: torch.Tensor = None,
         values: torch.Tensor = None,
     ) -> torch.Tensor:
-        if not self._validate_inputs(input_ids, segments, age, abspos, inputs_embeds, values):
+        if not self._validate_inputs(
+            input_ids, segments, age, abspos, inputs_embeds, values
+        ):
             raise ValueError("Invalid input arguments")
         if inputs_embeds is not None:
             return inputs_embeds
-        
+
         # Separate embedding for concepts and values
         concept_embeddings = self.get_input_embeddings(input_ids, values)
         embeddings = concept_embeddings
@@ -110,17 +112,21 @@ class EhrEmbeddings(nn.Module):
         values: Optional[torch.Tensor],
     ) -> bool:
         if inputs_embeds is not None:
-            return not any(x is not None for x in [input_ids, segments, age, abspos, values])
+            return not any(
+                x is not None for x in [input_ids, segments, age, abspos, values]
+            )
         return all(x is not None for x in [input_ids, segments, age, abspos, values])
 
-    def get_input_embeddings(self, input_ids: torch.LongTensor, values: torch.Tensor) -> torch.Tensor:
+    def get_input_embeddings(
+        self, input_ids: torch.LongTensor, values: torch.Tensor
+    ) -> torch.Tensor:
         value_mask = ~torch.isnan(values)
 
         B, F = input_ids.shape
-        
+
         # Get the target dtype from model parameters
         target_dtype = next(self.parameters()).dtype
-        
+
         # Process categorical values
         cat_vals = input_ids[~value_mask].long()
         cat_embeddings = self.concept_embeddings(cat_vals).to(target_dtype)
@@ -130,7 +136,9 @@ class EhrEmbeddings(nn.Module):
         float_embeddings = self.value_embeddings(float_vals).to(target_dtype)
 
         # Create output tensor with the target dtype
-        out = torch.zeros(B, F, self.hidden_size, device=input_ids.device, dtype=target_dtype)
+        out = torch.zeros(
+            B, F, self.hidden_size, device=input_ids.device, dtype=target_dtype
+        )
 
         # Recombined
         out[~value_mask] = cat_embeddings
@@ -145,14 +153,13 @@ class ContinuousEmbedding(nn.Module):
         self.hidden_size = hidden_size
         # self.linear_layer = nn.Linear(1, hidden_size)
         self.value_layer = nn.Sequential(
-            nn.Linear(1, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size)
+            nn.Linear(1, hidden_size), nn.ReLU(), nn.Linear(hidden_size, hidden_size)
         )
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         value_embed = self.value_layer(values.unsqueeze(-1))  # (B, T, H)
         return value_embed
+
 
 class Time2Vec(torch.nn.Module):
     """Time2Vec embedding layer that combines linear and periodic components.

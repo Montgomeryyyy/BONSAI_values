@@ -49,7 +49,7 @@ SCHEMA = {
     SEGMENT_COL: "int32",
 }
 
-FEATURES_SCHEMA = {**SCHEMA, CONCEPT_COL: "str"}
+FEATURES_SCHEMA = {**SCHEMA, CONCEPT_COL: "str", VALUE_COL: "float64"}
 TOKENIZED_SCHEMA = {**SCHEMA, CONCEPT_COL: "int32", VALUE_COL: "float64"}
 
 ### Folds and Splits###

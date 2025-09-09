@@ -19,6 +19,7 @@ class FineTuneHead(torch.nn.Module):
             return_embedding=return_embedding,
         )
 
+
 class BiGRU(torch.nn.Module):
     def __init__(self, hidden_size, classifier_hidden_size):
         super().__init__()
@@ -45,7 +46,7 @@ class BiGRU(torch.nn.Module):
     ) -> torch.Tensor:
         # Convert to float32 for RNN compatibility
         hidden_states = hidden_states.float()
-        
+
         lengths = attention_mask.sum(dim=1).cpu()
         packed = torch.nn.utils.rnn.pack_padded_sequence(
             hidden_states, lengths, batch_first=True, enforce_sorted=False

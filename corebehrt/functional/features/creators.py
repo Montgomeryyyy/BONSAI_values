@@ -15,13 +15,9 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
-<<<<<<< HEAD
     ADMISSION_ID_COL,
     ADMISSION,
     DISCHARGE,
-=======
-    VALUE_COL,
->>>>>>> 3242bde9 (added numeric embedding layer)
 )
 from corebehrt.functional.utils.time import get_hours_since_epoch
 from corebehrt.functional.features.normalize import normalize_segments_series
@@ -37,7 +33,6 @@ def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:
     """
     concepts[ABSPOS_COL] = get_hours_since_epoch(concepts[TIMESTAMP_COL])
     return concepts
-
 
 
 def create_age_in_years(concepts: pd.DataFrame) -> pd.DataFrame:
@@ -221,7 +216,6 @@ def sort_features(concepts: pd.DataFrame) -> pd.DataFrame:
     else:
         concepts = concepts.sort_values([PID_COL, ABSPOS_COL])
 
-<<<<<<< HEAD
     return concepts
 
 
@@ -428,6 +422,3 @@ def assign_segments_to_death(df: pd.DataFrame) -> pd.DataFrame:
         df[CONCEPT_COL] != DEATH_CODE, df["max_segment"]
     )
     return df.drop(columns=["max_segment"])
-=======
-    return concepts
->>>>>>> 9567b205 (fix sequences)

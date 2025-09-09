@@ -16,7 +16,7 @@ PATIENTS_INFO_PATH = "../../../data/vals/patient_infos/patient_info_10000n.parqu
 DEFAULT_WRITE_DIR = "../../../data/vals/synthetic_data/10000n/"
 SAVE_NAME = "bn_labs_n10000_fixed_n"
 DEFAULT_N_HIGH_PATIENTS = 5000  # Default number of high patients
-DEFAULT_N_LOW_PATIENTS = 5000   # Default number of low patients
+DEFAULT_N_LOW_PATIENTS = 5000  # Default number of low patients
 
 # Define lab value ranges and their probabilities for different conditions
 LAB_VALUE_INFO = {
@@ -62,7 +62,7 @@ CONCEPT_RELATIONSHIPS = {
                     "min_days": 10,
                     "max_days": 180,
                 },
-            }
+            },
         },
     },
 }
@@ -90,7 +90,9 @@ def generate_lab_value(lab_name: str, condition: str) -> Optional[float]:
     return None
 
 
-def get_related_concepts(base_concept: str, condition: str) -> Tuple[List[str], List[float]]:
+def get_related_concepts(
+    base_concept: str, condition: str
+) -> Tuple[List[str], List[float]]:
     """
     Get all related concepts and their values for a given base concept and condition.
 
@@ -118,7 +120,7 @@ def get_related_concepts(base_concept: str, condition: str) -> Tuple[List[str], 
         else:
             # If no conditions specified, use probability
             should_generate_lab = np.random.random() < info["prob"]
-            
+
         if should_generate_lab:
             # Generate value based on the selected condition
             value = generate_lab_value(lab_name, condition)
@@ -129,7 +131,9 @@ def get_related_concepts(base_concept: str, condition: str) -> Tuple[List[str], 
     return related_concepts, values
 
 
-def generate_lab_concepts(pids_list: List[str], n_high_patients: int, n_low_patients: int) -> pd.DataFrame:
+def generate_lab_concepts(
+    pids_list: List[str], n_high_patients: int, n_low_patients: int
+) -> pd.DataFrame:
     """
     Generate lab concepts and values for a list of patient IDs.
 
@@ -142,19 +146,21 @@ def generate_lab_concepts(pids_list: List[str], n_high_patients: int, n_low_pati
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
     """
     records = []
-    
+
     # Create a deterministic assignment of conditions
     # First n_high_patients get "high", next n_low_patients get "low"
     n_patients = len(pids_list)
     total_assigned = n_high_patients + n_low_patients
-    
+
     if total_assigned != n_patients:
-        raise ValueError(f"Total assigned patients ({total_assigned}) must equal total patients ({n_patients})")
-    
+        raise ValueError(
+            f"Total assigned patients ({total_assigned}) must equal total patients ({n_patients})"
+        )
+
     # Shuffle the patient IDs to randomize which patients get high vs low
     shuffled_pids = pids_list.copy()
     np.random.shuffle(shuffled_pids)
-    
+
     # Create a mapping from PID to condition
     pid_to_condition = {}
     for i, pid in enumerate(shuffled_pids):
@@ -166,7 +172,7 @@ def generate_lab_concepts(pids_list: List[str], n_high_patients: int, n_low_pati
     for pid in pids_list:
         # Get the pre-assigned condition for this patient
         condition = pid_to_condition[pid]
-        
+
         # For each base concept in CONCEPT_RELATIONSHIPS
         for base_concept, info in CONCEPT_RELATIONSHIPS.items():
             # Determine if this patient gets this base concept
@@ -302,7 +308,9 @@ def generate_timestamps(
     return timestamps
 
 
-def generate_data(patient_df: pd.DataFrame, write_dir: str, n_high_patients: int, n_low_patients: int) -> None:
+def generate_data(
+    patient_df: pd.DataFrame, write_dir: str, n_high_patients: int, n_low_patients: int
+) -> None:
     """
     Generate synthetic data for patients and save to parquet.
 
@@ -315,13 +323,17 @@ def generate_data(patient_df: pd.DataFrame, write_dir: str, n_high_patients: int
     # Filter patient dataset to only include patients that will get lab values
     total_assigned = n_high_patients + n_low_patients
     if total_assigned > len(patient_df):
-        raise ValueError(f"Total assigned patients ({total_assigned}) cannot be greater than available patients ({len(patient_df)})")
-    
+        raise ValueError(
+            f"Total assigned patients ({total_assigned}) cannot be greater than available patients ({len(patient_df)})"
+        )
+
     # Take only the first total_assigned patients
     filtered_patient_df = patient_df.head(total_assigned)
-    
+
     # Generate concepts and lab values
-    concepts_data = generate_lab_concepts(filtered_patient_df["PID"].tolist(), n_high_patients, n_low_patients)
+    concepts_data = generate_lab_concepts(
+        filtered_patient_df["PID"].tolist(), n_high_patients, n_low_patients
+    )
 
     # Create final DataFrame
     data = pd.DataFrame(
@@ -333,7 +345,9 @@ def generate_data(patient_df: pd.DataFrame, write_dir: str, n_high_patients: int
     )
 
     # Print statistics
-    total_patients = len(filtered_patient_df)  # This should equal n_high_patients + n_low_patients
+    total_patients = len(
+        filtered_patient_df
+    )  # This should equal n_high_patients + n_low_patients
     patients_with_labs = len(data[data["code"] == "S/LAB1"])
     patients_with_positive_diagnosis = len(data[data["code"] == "S/DIAG_POSITIVE"])
     patients_with_negative_diagnosis = len(data[data["code"] == "S/DIAG_NEGATIVE"])
@@ -350,8 +364,12 @@ def generate_data(patient_df: pd.DataFrame, write_dir: str, n_high_patients: int
     )
     print(f"Requested high patients: {n_high_patients}")
     print(f"Requested low patients: {n_low_patients}")
-    print(f"Actual high patients: {len(data[(data['code'] == 'S/LAB1') & (data['numeric_value'] == 1)])}")
-    print(f"Actual low patients: {len(data[(data['code'] == 'S/LAB1') & (data['numeric_value'] == 0)])}")
+    print(
+        f"Actual high patients: {len(data[(data['code'] == 'S/LAB1') & (data['numeric_value'] == 1)])}"
+    )
+    print(
+        f"Actual low patients: {len(data[(data['code'] == 'S/LAB1') & (data['numeric_value'] == 0)])}"
+    )
     print(f"Total patients in dataset: {len(patient_df)} (original)")
     print(f"Patients used: {total_patients} (filtered)")
     print("\nLab value distribution:")

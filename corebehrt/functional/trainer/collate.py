@@ -41,7 +41,7 @@ def dynamic_padding(batch: list) -> dict:
                     filler = torch.full((diff,), -100, dtype=tensor_field.dtype)
                 elif key == VALUE_FEAT:  # "numeric_value"
                     # For value features, pad with nan
-                    filler = torch.full((diff,), float('nan'), dtype=tensor_field.dtype)
+                    filler = torch.full((diff,), float("nan"), dtype=tensor_field.dtype)
                 else:
                     # For other sequence fields, pad with 0
                     filler = torch.zeros(diff, dtype=tensor_field.dtype)

@@ -11,11 +11,7 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
-<<<<<<< HEAD
     SEGMENT_COL,
-=======
-    SEGMENT_COL
->>>>>>> d66ba95c (combined seq)
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -27,15 +23,17 @@ from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function
 from corebehrt.functional.features.values import get_unique_value_counts
 
+
 def convert_numeric_strings(x):
-            if isinstance(x, str):
-                try:
-                    # Try to convert to float, if successful return the float
-                    return float(x)
-                except ValueError:
-                    # If conversion fails, keep as string
-                    return x
+    if isinstance(x, str):
+        try:
+            # Try to convert to float, if successful return the float
+            return float(x)
+        except ValueError:
+            # If conversion fails, keep as string
             return x
+    return x
+
 
 def load_tokenize_and_save(
     features_path: str,
@@ -145,7 +143,6 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
-<<<<<<< HEAD
             # Determine value type and segment creation strategy
             features_cfg = cfg.get("features", {})
             value_type = features_cfg.get("values", {}).get("value_type", None)
@@ -172,10 +169,6 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 logger.warning("No value type found, dropping numeric_value column")
 
             # Create features
-=======
-            concepts = create_row_id(concepts)
-            concepts = handle_numeric_values(concepts, cfg.get("features"))
->>>>>>> 9567b205 (fix sequences)
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(
                 concepts, use_admission_ids_for_segments=make_adm_segments
@@ -183,14 +176,16 @@ def create_and_save_features(cfg, splits, logger) -> None:
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
-<<<<<<< HEAD
-=======
           
             # Convert mixed types in 'code' column to strings to maintain schema compatibility
             if 'code' in features.columns:
                 features['code'] = features['code'].astype(str)
             
->>>>>>> d66ba95c (combined seq)
+
+            # Convert mixed types in 'code' column to strings to maintain schema compatibility
+            if "code" in features.columns:
+                features["code"] = features["code"].astype(str)
+
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
                 index=False,
@@ -299,7 +294,6 @@ def handle_numeric_values(
         return concepts
 
     if features_cfg and "values" in features_cfg:
-<<<<<<< HEAD
         bin_values = features_cfg.values.value_creator_kwargs.get("bin_values", False)
         num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
         add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
@@ -325,14 +319,11 @@ def handle_numeric_values(
             )
 
             raise ValueError(f"Unsupported value type: {value_type}")
-=======
         return ValueCreator.add_values(
             concepts,
         )
-<<<<<<< HEAD
         # null_token = getattr(features_cfg.values, "null_token", VALUE_NULL_TOKEN)
         # return ValueCreator.add_null_token(concepts, null_token)
->>>>>>> d66ba95c (combined seq)
         # TODO: add both support for discrete and continuous values
         # num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
         # add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
@@ -350,21 +341,8 @@ def handle_numeric_values(
 
     return concepts.drop(columns=["numeric_value"])
 
-<<<<<<< HEAD
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
     """Assign segment numbers to each row within each PID group."""
     concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
     return concepts
-=======
-def create_segments(concepts: pd.DataFrame) -> pd.DataFrame:
-=======
-
-    return concepts.drop(columns=["numeric_value"])
-
-def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
->>>>>>> 9567b205 (fix sequences)
-    """Assign segment numbers to each row within each PID group."""
-    concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
-    return concepts
->>>>>>> d66ba95c (combined seq)

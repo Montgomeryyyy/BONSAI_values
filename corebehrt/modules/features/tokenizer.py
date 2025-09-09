@@ -8,7 +8,6 @@ from corebehrt.functional.features.tokenize import (
 )
 
 
-
 class EHRTokenizer:
     def __init__(
         self,
@@ -69,9 +68,8 @@ class EHRTokenizer:
                     df, add_sep=self.sep_tokens, add_cls=self.cls_token
                 )
             # Tokenize within the same partition
-            tokenized_codes, values = tokenize_partition(df[CONCEPT_COL], self.vocabulary)
+            tokenized_codes = tokenize_partition(df[CONCEPT_COL], self.vocabulary)
             df[CONCEPT_COL] = tokenized_codes
-            df[VALUE_COL] = values
             return df
 
         # return features.map_partitions(_process_partition)

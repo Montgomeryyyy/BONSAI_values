@@ -9,7 +9,6 @@ from corebehrt.constants.data import (
     CONCEPT_COL,
     SEGMENT_COL,
     ABSPOS_COL,
-    VAL_TOKEN,
 )
 
 
@@ -58,38 +57,13 @@ def add_special_tokens_partition(
     return df
 
 
-def tokenize_partition(series: pd.Series, vocabulary: dict) -> tuple[pd.Series, pd.Series]:
-    """Optimized in-partition tokenization using direct dictionary mapping.
-    
-    Returns:
-        tuple: (tokenized_series, values_series)
-        - tokenized_series: Series with tokens (VALUE_TOKEN for floats, regular tokens for strings)
-        - values_series: Series with actual float values (NaN for non-floats)
-    """
-    # Create mask for float values
-    value_mask = pd.to_numeric(series, errors='coerce').notna()
+def tokenize_partition(
+    series: pd.Series, vocabulary: dict
+) -> tuple[pd.Series, pd.Series]:
+    """Optimized in-partition tokenization using direct dictionary mapping."""
     unk_token = vocabulary[UNKNOWN_TOKEN]
-    
-    # Get the VALUE token ID
-    value_token = vocabulary[VAL_TOKEN]
-    
-    # Initialize result with original values
-    result = series.copy()
-    values_result = pd.Series([float('nan')] * len(series), index=series.index)
-    
-    # Handle float values - replace with VALUE token and store actual values
-    if value_mask.any():
-        result[value_mask] = value_token
-        values_result[value_mask] = series[value_mask].astype(float)
-    
-    # Tokenize non-float values
-    non_float_mask = ~value_mask
-    if non_float_mask.any():
-        # Direct mapping with fillna for unknown tokens (only for non-float values)
-        tokenized_values = series[non_float_mask].map(vocabulary).fillna(unk_token).astype(int)
-        result[non_float_mask] = tokenized_values
-    
-    return result, values_result
+    # Direct mapping with fillna for unknown tokens
+    return series.map(vocabulary).fillna(unk_token).astype(int)
 
 
 def limit_concept_length_partition(series: pd.Series, cutoffs: dict) -> pd.Series:
