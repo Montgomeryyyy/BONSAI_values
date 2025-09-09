@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from corebehrt.constants.data import CONCEPT_COL, VALUE_COL, VAL_TOKEN
 
 
@@ -106,10 +107,17 @@ class ValueCreatorDiscrete:
         concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
         concepts["index"] = concepts.index
         concepts.loc[:, "order"] = 0
-        values = concepts.dropna(subset=[VALUE_COL]).copy()
-        values.loc[:, "code"] = VAL_TOKEN
-        values.loc[:, "order"] = 1
-        concatted = pd.concat([concepts, values])
+        
+        val_mask = concepts[VALUE_COL].notna()
+        if val_mask.any():
+            values = concepts[val_mask].copy()
+            values.loc[:, CONCEPT_COL] = VAL_TOKEN
+            values.loc[:, "order"] = 1
+            concepts.loc[val_mask, VALUE_COL] = np.nan
+            concatted = pd.concat([concepts, values], ignore_index=True)
+        else:
+            concatted = concepts
+            
         return concatted
 
     @staticmethod

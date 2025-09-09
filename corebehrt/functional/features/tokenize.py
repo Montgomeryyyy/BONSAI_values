@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 from corebehrt.constants.data import (
     CLS_TOKEN,
     SEP_TOKEN,
@@ -9,6 +9,7 @@ from corebehrt.constants.data import (
     CONCEPT_COL,
     SEGMENT_COL,
     ABSPOS_COL,
+    VALUE_COL,
 )
 
 
@@ -33,6 +34,7 @@ def add_special_tokens_partition(
             SPECIAL_TOKEN_ABSPOS_ADJUSTMENT  # Adjust position to come before earliest event
         )
         cls_rows[SEGMENT_COL] = 0
+        cls_rows[VALUE_COL] = np.nan
         special_rows.append(cls_rows)
 
     if add_sep:
@@ -47,6 +49,7 @@ def add_special_tokens_partition(
         sep_rows[ABSPOS_COL] += (
             SPECIAL_TOKEN_ABSPOS_ADJUSTMENT  # Adjust position slightly
         )
+        sep_rows[VALUE_COL] = np.nan
         special_rows.append(sep_rows)
 
     # Combine all rows and sort by 'PID' and 'abspos'

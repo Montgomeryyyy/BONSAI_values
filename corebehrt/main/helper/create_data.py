@@ -191,7 +191,6 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 index=False,
                 schema=pa.schema(FEATURES_SCHEMA),
             )
-            # print(features.head(50))
 
         # Log final statistics for this split
         logger.info(f"Total concepts loaded: {total_concepts_loaded}")
