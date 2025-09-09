@@ -20,16 +20,17 @@ from theoretical_separation import (
 )
 
 # Default parameters
-DEFAULT_INPUT_FILE = "../../../data/vals/synthetic_data/100000n/bn_labs_n100000_50p_1unq.csv"
+N = 100000
+DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1unq.csv"
 MIN_LABS_PER_PATIENT = 3
 MAX_LABS_PER_PATIENT = 10
 SWITCHING_PROBABILITY = 1.0  # 100% probability of switching for high-risk patients
 LOW_MEAN = 0.35
 HIGH_MEAN = 0.65
 STD = 0.05
-DEFAULT_WRITE_DIR = "../../../data/vals/synthetic_data/100000n/"
-DEFAULT_PLOT_DIR = "../../../data/vals/synthetic_data_plots/100000n/"
-SAVE_NAME = f"multi_lab_switching_risk_labs{MIN_LABS_PER_PATIENT}_{MAX_LABS_PER_PATIENT}_switch{int(SWITCHING_PROBABILITY*100)}p_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
+DEFAULT_WRITE_DIR = f"../../../data/vals/synthetic_data/{N}n/"
+DEFAULT_PLOT_DIR = f"../../../data/vals/synthetic_data_plots/{N}n/"
+SAVE_NAME = f"multi_lab_switching_risk_labs{MIN_LABS_PER_PATIENT}_{MAX_LABS_PER_PATIENT}_switch{int(SWITCHING_PROBABILITY*100)}_n{N}_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
 POSITIVE_DIAGS = ["S/DIAG_POSITIVE"]
 
 # Define lab value distributions
@@ -717,21 +718,6 @@ def main():
 
     # Print statistics
     print_statistics(data)
-    theoretical_performance = calculate_theoretical_performance(data)
-
-    # Create plots
-    plot_dir = Path(DEFAULT_PLOT_DIR)
-    plot_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Distribution plot
-    distribution_plot_path = plot_dir / f"{SAVE_NAME}_distribution_plot.png"
-    create_distribution_plot(
-        data, distribution_plot_path, perfect_roc=theoretical_performance["theoretical_switch_auc"]
-    )
-    
-    # Sequence plot
-    sequence_plot_path = plot_dir / f"{SAVE_NAME}_sequence_plot.png"
-    create_sequence_plot(data, sequence_plot_path)
 
     # Write to CSV
     write_dir = Path(args.write_dir)
@@ -754,16 +740,6 @@ def main():
     
     normalized_filename = write_dir / f"{SAVE_NAME}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
-    
-    # Create distribution plot for normalized data
-    normalized_plot_path = plot_dir / f"{SAVE_NAME}_minmaxnorm_distribution_plot.png"
-    normalized_theoretical_performance = calculate_theoretical_performance(normalized_data)
-    create_distribution_plot(
-        normalized_data,
-        normalized_plot_path,
-        perfect_roc=normalized_theoretical_performance["theoretical_switch_auc"],
-    )
-    print(f"\nSaved min-max normalized data to {normalized_filename}")
 
 
 if __name__ == "__main__":
