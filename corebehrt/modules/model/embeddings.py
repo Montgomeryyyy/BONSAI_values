@@ -61,8 +61,6 @@ class EhrEmbeddings(nn.Module):
         self.value_embeddings = ContinuousEmbedding(
             hidden_size, value_null_token, mode=value_embedding_mode
         )
-        if value_embedding_mode == "concat":
-            self.projection_layer = nn.Linear(2 * hidden_size, hidden_size)
 
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
         self.age_embeddings = Time2Vec(
@@ -96,11 +94,7 @@ class EhrEmbeddings(nn.Module):
         
         # Separate embedding for concepts and values
         concept_embeddings = self.concept_embeddings(input_ids)
-        if self.value_embedding_mode == "concat":
-            value_embeds = self.value_embeddings(values, concept_embeddings)
-            embeddings = torch.cat([concept_embeddings, value_embeds], dim=-1)
-            embeddings = self.projection_layer(embeddings)
-        elif self.value_embedding_mode == "film":
+        if self.value_embedding_mode == "concat" or self.value_embedding_mode == "film":
             embeddings = self.value_embeddings(values, concept_embeddings)
         elif self.value_embedding_mode == "linear":
             embeddings = concept_embeddings
@@ -158,14 +152,14 @@ class ContinuousEmbedding(nn.Module):
         if self.mode == "film":
             gamma = self.gamma_layer(concept_embeds)
             beta = self.beta_layer(concept_embeds)
-            return (gamma * value_embed + beta) * mask
+            return (gamma * value_embed + beta) * mask + concept_embeds * (1 - mask)
 
         elif self.mode == "concat":
             combined = torch.cat([concept_embeds, value_embed], dim=-1)
-            return self.concat_proj(combined) * mask
+            return self.concat_proj(combined) * mask + concept_embeds * (1 - mask)
 
         elif self.mode == "linear":
-            return value_embed 
+            return value_embed
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
 
