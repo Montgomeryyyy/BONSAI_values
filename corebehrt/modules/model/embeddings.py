@@ -207,14 +207,14 @@ class SeparateContinuousEmbedding(nn.Module):
         if self.value_embedding_mode == "film":
             gamma = self.gamma_layer(concept_embeds)
             beta = self.beta_layer(concept_embeds)
-            return (gamma * value_embed + beta) * mask
+            return (gamma * value_embed + beta) * mask + concept_embeds * (1 - mask)
 
         elif self.value_embedding_mode == "concat":
             combined = torch.cat([concept_embeds, value_embed], dim=-1)
-            return self.concat_proj(combined) * mask
+            return self.concat_proj(combined) * mask + concept_embeds * (1 - mask)
 
         elif self.mode == "linear":
-            return value_embed 
+            return value_embed
         else:
             raise ValueError(f"Unknown value_embedding_mode: {self.value_embedding_mode}")
 
