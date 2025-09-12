@@ -18,6 +18,7 @@ from theoretical_separation import (
     manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
+from sklearn.metrics import roc_auc_score
 
 # Default parameters
 N = 100000
@@ -25,9 +26,9 @@ DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1
 MIN_LABS_PER_PATIENT = 3
 MAX_LABS_PER_PATIENT = 10
 SWITCHING_PROBABILITY = 1.0  # 100% probability of switching for high-risk patients
-LOW_MEAN = 0.35
-HIGH_MEAN = 0.65
-STD = 0.05
+LOW_MEAN = 0.45
+HIGH_MEAN = 0.55
+STD = 0.10
 DEFAULT_WRITE_DIR = f"../../../data/vals/synthetic_data/{N}n/"
 DEFAULT_PLOT_DIR = f"../../../data/vals/synthetic_data_plots/{N}n/"
 SAVE_NAME = f"multi_lab_switching_risk_labs{MIN_LABS_PER_PATIENT}_{MAX_LABS_PER_PATIENT}_switch{int(SWITCHING_PROBABILITY*100)}_n{N}_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
@@ -375,266 +376,45 @@ def print_statistics(data: pd.DataFrame) -> None:
     print(f"Max: {negative_lab_values.max():.3f}")
 
 
-def create_distribution_plot(
-    data: pd.DataFrame, save_path: Path, perfect_roc: float
-) -> None:
-    """
-    Create a figure showing the distribution of lab values for positive vs negative patients.
+def calculate_theoretical_switch_auc(
+    df,
+    midpoint,
+    lab_code="S/LAB1",
+    subject_col="subject_id",
+    value_col="numeric_value",
+    positive_diag_code="S/DIAG_POSITIVE",
+    target_col=None,             # if None, derive from diag code
+    use_distance=True
+):
+    # 1) Work only on the lab rows
+    labs = df[df["code"] == lab_code].copy()
+    if labs.empty:
+        raise ValueError(f"No rows found with code == {lab_code}")
 
-    Args:
-        data: DataFrame containing the synthetic data
-        save_path: Path to save the plot
-        perfect_roc: The theoretical perfect ROC AUC value
-    """
-    # Get lab values for positive and negative patients
-    lab_mask = data["code"] == "S/LAB1"
-    lab_data = data[lab_mask].copy()
-    
-    # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients)
+    # 2) Get labels per subject (derive if not provided)
+    if target_col is None:
+        pos_ids = set(df[df["code"] == positive_diag_code][subject_col].unique())
+        labs["_is_positive"] = labs[subject_col].isin(pos_ids).astype(int)
+        target_col = "_is_positive"
+    elif target_col not in labs.columns:
+        raise ValueError(f"Target column '{target_col}' not present in lab rows.")
 
-    # Create a single subplot for the histogram
-    fig, ax1 = plt.subplots(1, 1, figsize=(8, 6))
-
-    # Histogram
-    positive_values = lab_data[lab_data["is_positive"]]["numeric_value"]
-    negative_values = lab_data[~lab_data["is_positive"]]["numeric_value"]
-
-    ax1.hist(positive_values, bins=30, alpha=0.7, label="High-Risk Patients", color="red")
-    ax1.hist(negative_values, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue")
-    ax1.set_xlabel("Lab Value")
-    ax1.set_ylabel("Count")
-    ax1.set_title("Distribution of Lab Values by Risk Status")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    # Add perfect ROC AUC text box
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # reserve top space for text
-    fig.text(
-        0.5,
-        0.98,  # x=center, y=near top
-        f"Theoretical Perfect ROC AUC: {perfect_roc:.4f}",
-        ha="center",
-        va="top",
-        fontsize=12,
-        fontweight="bold",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.8),
-    )
-
-    os.makedirs(save_path.parent, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close()
-
-    print(f"Distribution plot saved to {save_path}")
-
-
-def create_sequence_plot(
-    data: pd.DataFrame, save_path: Path
-) -> None:
-    """
-    Create a plot showing lab value sequences for individual patients.
-
-    Args:
-        data: DataFrame containing the synthetic data
-        save_path: Path to save the plot
-    """
-    lab_mask = data["code"] == "S/LAB1"
-    lab_data = data[lab_mask].copy()
-    
-    # Recreate is_positive column for analysis
-    positive_patients_set = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients_set)
-    
-    # Sample a few patients for visualization
-    positive_patients = lab_data[lab_data["is_positive"]]["subject_id"].unique()
-    negative_patients = lab_data[~lab_data["is_positive"]]["subject_id"].unique()
-    
-    # Sample 5 patients from each group
-    sample_positive = np.random.choice(positive_patients, min(5, len(positive_patients)), replace=False)
-    sample_negative = np.random.choice(negative_patients, min(5, len(negative_patients)), replace=False)
-    
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-    
-    # Plot positive patients (high-risk: switching distributions)
-    for patient_id in sample_positive:
-        patient_data = lab_data[lab_data["subject_id"] == patient_id].sort_values("time")
-        ax1.plot(patient_data["time"], patient_data["numeric_value"], 
-                alpha=0.7, linewidth=2, label=f"Patient {patient_id}")
-    
-    ax1.set_xlabel("Time")
-    ax1.set_ylabel("Lab Value")
-    ax1.set_title("High-Risk Patients (switching between distributions)")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Plot negative patients (low-risk: consistent distribution)
-    for patient_id in sample_negative:
-        patient_data = lab_data[lab_data["subject_id"] == patient_id].sort_values("time")
-        ax2.plot(patient_data["time"], patient_data["numeric_value"], 
-                alpha=0.7, linewidth=2, label=f"Patient {patient_id}")
-    
-    ax2.set_xlabel("Time")
-    ax2.set_ylabel("Lab Value")
-    ax2.set_title("Low-Risk Patients (consistent distribution)")
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    os.makedirs(save_path.parent, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    
-    print(f"Sequence plot saved to {save_path}")
-
-
-def calculate_theoretical_performance(data: pd.DataFrame) -> dict:
-    """
-    Calculate the theoretical performance of the model.
-
-    Args:
-        data: DataFrame containing the synthetic data
-        
-    Returns:
-        dict: Dictionary containing performance metrics
-    """
-    sweep_auc = sweep_threshold_auc(data)
-    mann_whitney_u = None  # manual_mann_whitney_u(data)
-    scipy_mann_whitney_u_auc = scipy_mann_whitney_u(data)
-    cohens_d_metric = cohens_d(data)
-    
-    # Calculate theoretical AUC based on distribution parameters
-    # For normal distributions with means HIGH_MEAN and LOW_MEAN, and same std
-    theoretical_auc = calculate_theoretical_auc(HIGH_MEAN, LOW_MEAN, STD)
-    
-    # Calculate switch detection AUCs
-    switch_detection_auc = calculate_switch_detection_auc(data)
-    theoretical_switch_auc = calculate_theoretical_switch_auc(HIGH_MEAN, LOW_MEAN, STD)
-    
-    print("\nTheoretical performance:")
-    print(f"Sweep AUC: {sweep_auc}")
-    print(f"Theoretical AUC (based on distributions): {theoretical_auc}")
-    print(f"Switch Detection AUC (actual): {switch_detection_auc}")
-    print(f"Theoretical Switch Detection AUC: {theoretical_switch_auc}")
-    print(f"Mann-Whitney U: {mann_whitney_u}")
-    print(f"Scipy Mann-Whitney U: {scipy_mann_whitney_u_auc}")
-    print(f"Cohen's d: {cohens_d_metric}")
-    return {
-        "sweep_auc": sweep_auc,
-        "theoretical_auc": theoretical_auc,
-        "switch_detection_auc": switch_detection_auc,
-        "theoretical_switch_auc": theoretical_switch_auc,
-        "mann_whitney_u": mann_whitney_u,
-        "scipy_mann_whitney_u_auc": scipy_mann_whitney_u_auc,
-        "cohens_d_metric": cohens_d_metric,
-    }
-
-
-def calculate_theoretical_auc(mean1: float, mean2: float, std: float) -> float:
-    """
-    Calculate theoretical AUC for two normal distributions.
-    
-    Args:
-        mean1: Mean of first distribution
-        mean2: Mean of second distribution  
-        std: Standard deviation (assumed same for both)
-        
-    Returns:
-        float: Theoretical AUC
-    """
-    from scipy.stats import norm
-    
-    # For two normal distributions with same variance, AUC = Φ((μ1 - μ2) / (σ√2))
-    # where Φ is the standard normal CDF
-    z_score = (mean1 - mean2) / (std * np.sqrt(2))
-    theoretical_auc = norm.cdf(z_score)
-    
-    return theoretical_auc
-
-
-def calculate_switch_detection_auc(data: pd.DataFrame) -> float:
-    """
-    Calculate AUC for detecting high-risk patients based on switch detection.
-    
-    Args:
-        data: DataFrame containing the synthetic data
-        
-    Returns:
-        float: AUC for switch detection
-    """
-    lab_data = data[data['code'] == 'S/LAB1'].sort_values(['subject_id', 'time'])
-    
-    # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients)
-    
-    patient_switches = []
-    patient_risks = []
-    
-    for patient_id in lab_data['subject_id'].unique():
-        patient_labs = lab_data[lab_data['subject_id'] == patient_id]['numeric_value'].values
-        is_positive = lab_data[lab_data['subject_id'] == patient_id]['is_positive'].iloc[0]
-        
-        # Count switches (values crossing the threshold)
-        threshold = (HIGH_MEAN + LOW_MEAN) / 2  # Midpoint between distributions
-        switches = sum(1 for i in range(1, len(patient_labs)) 
-                      if (patient_labs[i-1] < threshold) != (patient_labs[i] < threshold))
-        
-        patient_switches.append(switches)
-        patient_risks.append(is_positive)
-    
-    from sklearn.metrics import roc_auc_score
-    auc = roc_auc_score(patient_risks, patient_switches)
-    return auc
-
-
-def calculate_theoretical_switch_auc(mean1: float, mean2: float, std: float) -> float:
-    """
-    Calculate theoretical AUC for switch detection between two normal distributions.
-    
-    This calculates the probability that we can correctly identify high-risk patients
-    (who switch once) vs low-risk patients (who don't switch) based on distribution overlap.
-    
-    Args:
-        mean1: Mean of first distribution
-        mean2: Mean of second distribution  
-        std: Standard deviation (assumed same for both)
-        
-    Returns:
-        float: Theoretical AUC for switch detection
-    """
-    from scipy.stats import norm
-    
-    # Calculate the probability of correctly detecting a switch
-    # A switch is detected when a value crosses the midpoint threshold
-    
-    threshold = (mean1 + mean2) / 2
-    
-    # Probability that a value from distribution 1 is below threshold
-    p1_below = norm.cdf((threshold - mean1) / std)
-    
-    # Probability that a value from distribution 2 is above threshold  
-    p2_above = 1 - norm.cdf((threshold - mean2) / std)
-    
-    # Probability of detecting a switch from dist1 to dist2
-    p_switch_detected = p1_below * p2_above
-    
-    # Probability of false switch detection (dist1 to dist1, but appears to cross)
-    # This happens when both values are near the threshold due to noise
-    p_false_switch = 2 * norm.pdf((threshold - mean1) / std) * norm.pdf((threshold - mean2) / std) * std
-    
-    # For perfect separation (no overlap), AUC = 1.0
-    # For overlapping distributions, AUC depends on switch detection probability
-    if abs(mean1 - mean2) > 6 * std:  # Essentially no overlap
-        theoretical_auc = 1.0
+    # 3) Compute Bayes-optimal “switch” score using midpoint
+    x = labs[value_col].to_numpy()
+    if use_distance:
+        d = x - midpoint
+        labs["_pos"] = np.maximum(d, 0.0)
+        labs["_neg"] = np.maximum(-d, 0.0)
+        g = labs.groupby(subject_col)
+        score = 2.0 * np.minimum(g["_pos"].sum(), g["_neg"].sum())
     else:
-        # More sophisticated calculation for overlapping case
-        # This is an approximation - the exact calculation is complex
-        separation = abs(mean1 - mean2) / std
-        theoretical_auc = norm.cdf(separation / 2)  # Approximate based on separation
-    
-    return theoretical_auc
+        left = (labs[value_col] < midpoint).groupby(labs[subject_col]).sum()
+        right = (labs[value_col] >= midpoint).groupby(labs[subject_col]).sum()
+        score = np.minimum(left, right).astype(float)
 
+    y = labs.groupby(subject_col)[target_col].first().reindex(score.index)
+    auc = roc_auc_score(y.values, score.values)
+    return auc
 
 def main():
     parser = argparse.ArgumentParser(
@@ -741,6 +521,10 @@ def main():
     normalized_filename = write_dir / f"{SAVE_NAME}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
 
+    # Calculate theoretical AUC
+    midpoint = (HIGH_MEAN + LOW_MEAN) / 2
+    theoretical_auc = calculate_theoretical_switch_auc(normalized_data, midpoint)
+    print(f"Theoretical AUC: {theoretical_auc}")
 
 if __name__ == "__main__":
     main()
