@@ -3,7 +3,11 @@ from os.path import exists, join
 import pandas as pd
 import torch
 
+<<<<<<< HEAD
 from corebehrt.constants.data import CONCEPT_COL, PID_COL, VALUE_COL
+=======
+from corebehrt.constants.data import CONCEPT_COL, PID_COL
+>>>>>>> 8a529b8e (more synth)
 from corebehrt.constants.paths import DATA_CFG
 from corebehrt.functional.preparation.convert import dataframe_to_patient_list
 from corebehrt.main.create_data import main_data
@@ -27,11 +31,15 @@ class TestCreateData(TestMainScript):
                 },
                 "features": {
                     "values": {
+<<<<<<< HEAD
                         "value_type": "discrete",
                         "value_creator_kwargs": {"bin_values": True},
                         "bin_mapping_func": {
                             "_target_": "corebehrt.functional.features.values.power_bin_distance_mean",
                         },
+=======
+                        "value_creator_kwargs": {"num_bins": 100},
+>>>>>>> 8a529b8e (more synth)
                     },
                 },
                 "tokenizer": {"sep_tokens": True, "cls_token": True},
@@ -58,7 +66,11 @@ class TestCreateData(TestMainScript):
         features = pd.concat([features_train, features_tuning, features_held_out])
         self.assertEqual(
             features.columns.to_list(),
+<<<<<<< HEAD
             [PID_COL, "age", "abspos", "segment", CONCEPT_COL, VALUE_COL],
+=======
+            [PID_COL, "age", "abspos", "segment", CONCEPT_COL],
+>>>>>>> 8a529b8e (more synth)
         )
 
         # 3: Check patients
@@ -91,6 +103,7 @@ class TestCreateData(TestMainScript):
             # print(f"First few rows:\n{tokenised_features.head()}")
 
             # Ensure required columns exist
+<<<<<<< HEAD
             required_columns = [
                 PID_COL,
                 CONCEPT_COL,
@@ -99,6 +112,9 @@ class TestCreateData(TestMainScript):
                 "age",
                 VALUE_COL,
             ]
+=======
+            required_columns = [PID_COL, CONCEPT_COL, "abspos", "segment", "age"]
+>>>>>>> 8a529b8e (more synth)
             for col in required_columns:
                 self.assertIn(
                     col, tokenised_features.columns, f"Missing required column: {col}"

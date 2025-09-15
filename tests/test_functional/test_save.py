@@ -22,22 +22,32 @@ class TestSaveFunctions(unittest.TestCase):
         # Create mock PatientDataset instances with PatientData objects
         mock_train_dataset = PatientDataset(
             patients=[
+<<<<<<< HEAD
                 PatientData(
                     pid=1, concepts=[], abspos=[], segments=[], ages=[], values=[]
                 ),
                 PatientData(
                     pid=2, concepts=[], abspos=[], segments=[], ages=[], values=[]
                 ),
+=======
+                PatientData(pid=1, concepts=[], abspos=[], segments=[], ages=[]),
+                PatientData(pid=2, concepts=[], abspos=[], segments=[], ages=[]),
+>>>>>>> 8a529b8e (more synth)
             ],
         )
         mock_val_dataset = PatientDataset(
             patients=[
+<<<<<<< HEAD
                 PatientData(
                     pid=3, concepts=[], abspos=[], segments=[], ages=[], values=[]
                 ),
                 PatientData(
                     pid=4, concepts=[], abspos=[], segments=[], ages=[], values=[]
                 ),
+=======
+                PatientData(pid=3, concepts=[], abspos=[], segments=[], ages=[]),
+                PatientData(pid=4, concepts=[], abspos=[], segments=[], ages=[]),
+>>>>>>> 8a529b8e (more synth)
             ],
         )
 

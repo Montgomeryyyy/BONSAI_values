@@ -3,7 +3,11 @@ from os.path import exists, join
 import pandas as pd
 import torch
 
+<<<<<<< HEAD
 from corebehrt.constants.data import CONCEPT_COL, PID_COL, VALUE_COL
+=======
+from corebehrt.constants.data import CONCEPT_COL, PID_COL
+>>>>>>> 8a529b8e (more synth)
 from corebehrt.constants.paths import DATA_CFG
 from corebehrt.main.create_data import main_data
 from tests.helpers import compute_column_checksum
@@ -50,7 +54,11 @@ class TestCreateData(TestMainScript):
         features = pd.concat([features_train, features_tuning, features_held_out])
         self.assertEqual(
             features.columns.to_list(),
+<<<<<<< HEAD
             [PID_COL, "age", "abspos", "segment", CONCEPT_COL, VALUE_COL],
+=======
+            [PID_COL, "age", "abspos", "segment", CONCEPT_COL],
+>>>>>>> 8a529b8e (more synth)
         )
 
         expected_features_train = pd.read_parquet(

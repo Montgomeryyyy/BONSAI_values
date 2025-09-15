@@ -1,7 +1,11 @@
 import unittest
 from datetime import datetime
+<<<<<<< HEAD
 import io
 import sys
+=======
+
+>>>>>>> 8a529b8e (more synth)
 import pandas as pd
 from pandas import NaT
 
@@ -76,7 +80,11 @@ class TestFeatureCreator(unittest.TestCase):
 
         self.feature_creator = FeatureCreator()
         self.expected_segments = pd.Series(
+<<<<<<< HEAD
             [0, 0, 1, 2, 3, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, 1, 2],
+=======
+            [0, 0, 1, 1, 2, 0, 0, 1, 2, 0, 0, 1, 1, 0, 0, 1, 2],
+>>>>>>> 8a529b8e (more synth)
             name="segment",  # bg + death
         )
 
@@ -98,6 +106,13 @@ class TestFeatureCreator(unittest.TestCase):
     def test_create_background(self):
         result, _ = self.feature_creator(self.concepts)
         self.assertTrue(any(result[CONCEPT_COL].str.startswith("BG_GENDER")))
+<<<<<<< HEAD
+=======
+        # Compare the segment values
+        self.assertTrue(
+            (result["segment"].values == self.expected_segments.values).all()
+        )
+>>>>>>> 8a529b8e (more synth)
 
     def test_create_background_wo_dob(self):
         # Remove DOB rows for only patient 1
@@ -106,6 +121,7 @@ class TestFeatureCreator(unittest.TestCase):
             concepts_wo_dob[CONCEPT_COL] == "DOB"
         )
         concepts_wo_dob = concepts_wo_dob[~patient_1_dob_mask].copy()
+<<<<<<< HEAD
 
         captured_output = io.StringIO()
         sys.stdout = captured_output
@@ -120,6 +136,11 @@ class TestFeatureCreator(unittest.TestCase):
             self.assertIn("patients without birthdate", output)
         finally:
             sys.stdout = sys.__stdout__
+=======
+        with self.assertRaises(ValueError) as context:
+            self.feature_creator(concepts_wo_dob)
+        self.assertIn("Some patients have no DOB", str(context.exception))
+>>>>>>> 8a529b8e (more synth)
 
     def test_create_abspos(self):
         result, _ = self.feature_creator(self.concepts)

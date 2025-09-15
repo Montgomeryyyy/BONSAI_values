@@ -8,7 +8,10 @@ paths:
   features: ./tests/data/features
   
 features:
+<<<<<<< HEAD
   use_admission_ids_for_segments: true
+=======
+>>>>>>> 8a529b8e (more synth)
   values:
     value_creator_kwargs:
       num_bins: 100
