@@ -3,7 +3,7 @@ logging:
   path: ./outputs/logs
 
 paths:
-  data: ./example_data/correlated_MEDS_data
+  data: ./example_data/lab_correlated_MEDS_data
   tokenized: ./outputs/tokenized
   features: ./outputs/features
   # optional
@@ -17,6 +17,7 @@ features:
   values:
     value_creator_kwargs:
       num_bins: 100
+      bin_mapping: ./bin_mappings/bin_mapping.pt
       # add_prefix: true # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
   agg_kwargs:

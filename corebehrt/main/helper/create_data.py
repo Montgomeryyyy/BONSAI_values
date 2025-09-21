@@ -20,6 +20,7 @@ from corebehrt.modules.features.tokenizer import EHRTokenizer
 from corebehrt.modules.features.values import ValueCreator
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
+from corebehrt.modules.setup.config import instantiate_function
 
 
 def load_tokenize_and_save(
@@ -115,7 +116,7 @@ def create_and_save_features(cfg, splits, logger) -> None:
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
-
+            print(features.head(50))
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
                 index=False,
@@ -220,6 +221,9 @@ def handle_numeric_values(
         return concepts
 
     if features_cfg and "values" in features_cfg:
+        bin_mapping = features_cfg.values.value_creator_kwargs.get("bin_mapping", None)
+        if bin_mapping is not None:
+            bin_mapping = torch.load(bin_mapping, weights_only=False)
         num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
         add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
         separator_regex = features_cfg.values.value_creator_kwargs.get(
@@ -230,6 +234,7 @@ def handle_numeric_values(
         return ValueCreator.bin_results(
             concepts,
             num_bins=num_bins,
+            bin_mapping=bin_mapping,
             add_prefix=add_prefix,
             separator_regex=separator_regex,
         )
