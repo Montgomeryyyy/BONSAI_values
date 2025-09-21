@@ -22,6 +22,7 @@ from theoretical_separation import (
 # Default parameters
 N = 100000
 DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1unq.csv"
+PATIENTS_INFO_PATH = "../../../data/vals/patient_infos/patient_info_10000n.parquet"
 
 # Lab value distributions - same distribution for all labs by default
 LAB_MEAN = 0.3  # Mean for all labs
@@ -102,13 +103,15 @@ def generate_lab_value(lab_name: str, lab_value_info: dict, noise_level: float =
 def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
-    Patient risk is determined by product of all labs > threshold.
+    Patient risk is determined by product of CLEAN lab values > threshold.
+    Observed lab values have noise added.
 
     Args:
         pids_list: List of patient IDs
         threshold: Threshold for product of all labs > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
+        noise_level: Amount of noise to add to observed values
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
@@ -117,35 +120,41 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
     patient_risk_map = {}
 
     for pid in pids_list:
-        # Generate exactly N lab values for each patient
-        lab_values = []
+        # Generate exactly N CLEAN lab values for each patient (no noise)
+        clean_lab_values = []
         lab_concepts = []
         
         for i in range(1, num_labs + 1):
             lab_concept = f"S/LAB{i}"
-            lab_value = generate_lab_value(lab_concept, lab_value_info, noise_level)
-            if lab_value is not None:
-                lab_values.append(lab_value)
+            clean_lab_value = generate_lab_value(lab_concept, lab_value_info, noise_level=0.0)  # No noise for true risk
+            if clean_lab_value is not None:
+                clean_lab_values.append(clean_lab_value)
                 lab_concepts.append(lab_concept)
         
-        if len(lab_values) == num_labs:  # Ensure we have all labs
-            # Determine patient risk based on multiplication equation (product of all labs)
-            lab_product = np.prod(lab_values)
-            is_high_risk = lab_product > threshold
-            
-            # Add random classification error (flip some classifications)
-            if np.random.random() < 0.05:  # 5% error rate
-                is_high_risk = not is_high_risk
-                
+        if len(clean_lab_values) == num_labs:  # Ensure we have all labs
+            # Determine patient risk based on CLEAN lab values (true underlying risk)
+            clean_lab_product = np.prod(clean_lab_values)
+            is_high_risk = clean_lab_product > threshold
+                            
             patient_risk_map[pid] = is_high_risk
             condition = "high_risk" if is_high_risk else "low_risk"
 
-            # Add all lab records
-            for i, (lab_concept, lab_value) in enumerate(zip(lab_concepts, lab_values)):
+            # Generate NOISY lab values for the observed data
+            noisy_lab_values = []
+            for clean_value in clean_lab_values:
+                if noise_level > 0:
+                    noise = np.random.normal(0, noise_level * abs(clean_value))
+                    noisy_value = clean_value + noise
+                else:
+                    noisy_value = clean_value
+                noisy_lab_values.append(noisy_value)
+
+            # Add all lab records using NOISY values (what the model will see)
+            for i, (lab_concept, noisy_lab_value) in enumerate(zip(lab_concepts, noisy_lab_values)):
                 records.append({
                     "PID": pid, 
                     "CONCEPT": lab_concept, 
-                    "RESULT": lab_value,
+                    "RESULT": noisy_lab_value,
                     "LAB_INDEX": i,
                     "CONDITION": condition
                 })
@@ -175,7 +184,7 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
 
 def generate_timestamps(
     pids_list: List[str], concepts: List[str], lab_indices: List[int], 
-    diag_min_days: int = DIAG_MIN_DAYS, diag_max_days: int = DIAG_MAX_DAYS
+    diag_min_days: int = DIAG_MIN_DAYS, diag_max_days: int = DIAG_MAX_DAYS, patient_df: pd.DataFrame = None
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
@@ -187,6 +196,7 @@ def generate_timestamps(
         lab_indices: List of lab indices corresponding to each record
         diag_min_days: Minimum days after last lab for diagnosis
         diag_max_days: Maximum days after last lab for diagnosis
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
 
     Returns:
         List[pd.Timestamp]: List of generated timestamps
@@ -198,13 +208,32 @@ def generate_timestamps(
         # Initialize patient's concept timestamps if not exists
         if pid not in concept_timestamps:
             concept_timestamps[pid] = {}
-            # Generate a random start time for this patient (within the last 2 years)
-            # Use seconds precision to match multi_lab_addition.py format
-            start_time = pd.Timestamp(year=2016, month=1, day=1)
-            end_time = pd.Timestamp(year=2025, month=1, day=1)
-            time_diff = (end_time - start_time).total_seconds()
-            random_seconds = np.random.randint(0, int(time_diff))
-            concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+            
+            # Get patient birth and death dates from patient_df
+            if patient_df is not None:
+                patient_info = patient_df[patient_df["subject_id"] == pid].iloc[0]
+                birthdate = pd.to_datetime(patient_info["birthdate"])
+                
+                # Handle deathdate - if NaT, use a default future date
+                deathdate = pd.to_datetime(patient_info["deathdate"])
+                if pd.isna(deathdate):
+                    deathdate = pd.Timestamp(year=2025, month=1, day=1)
+                    
+                # Ensure deathdate is after birthdate
+                if deathdate <= birthdate:
+                    deathdate = birthdate + pd.Timedelta(days=1)
+                    
+                # Generate a random start time for this patient between birth and death
+                time_diff = (deathdate - birthdate).total_seconds()
+                random_seconds = np.random.randint(0, int(time_diff))
+                concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(seconds=random_seconds)
+            else:
+                # Fallback to default time range if no patient_df provided
+                start_time = pd.Timestamp(year=2016, month=1, day=1)
+                end_time = pd.Timestamp(year=2025, month=1, day=1)
+                time_diff = (end_time - start_time).total_seconds()
+                random_seconds = np.random.randint(0, int(time_diff))
+                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
 
         # Handle timestamps based on concept type
         if concept in ["S/DIAG_POSITIVE", "S/DIAG_NEGATIVE"]:
@@ -245,7 +274,8 @@ def generate_synthetic_data(
     lab_value_info: dict,
     diag_min_days: int = DIAG_MIN_DAYS,
     diag_max_days: int = DIAG_MAX_DAYS,
-    noise_level: float = NOISE_LEVEL
+    noise_level: float = NOISE_LEVEL,
+    patient_df: pd.DataFrame = None
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
@@ -281,7 +311,8 @@ def generate_synthetic_data(
         data["code"].tolist(),
         concepts_data["LAB_INDEX"].tolist(),
         diag_min_days,
-        diag_max_days
+        diag_max_days,
+        patient_df
     )
 
     return data
@@ -534,6 +565,12 @@ def main():
         default=NOISE_LEVEL,
         help="Noise level to add to lab values (0.0 = no noise, 0.1 = 10% noise)",
     )
+    parser.add_argument(
+        "--patient_info_path",
+        type=str,
+        default=PATIENTS_INFO_PATH,
+        help="Path to patient information parquet file (optional, for realistic birth/death dates)",
+    )
 
     args = parser.parse_args()
 
@@ -543,6 +580,16 @@ def main():
     except FileNotFoundError:
         print(f"Error: Could not find input file at {args.input_file}")
         return
+
+    # Read patient info data if provided
+    patient_df = None
+    if args.patient_info_path:
+        try:
+            patient_df = pd.read_parquet(args.patient_info_path)
+            print(f"Loaded patient info from {args.patient_info_path}")
+        except FileNotFoundError:
+            print(f"Warning: Could not find patient info file at {args.patient_info_path}")
+            print("Using default timestamp generation")
 
     print("Initial data:")
     print(input_data.head())
@@ -557,8 +604,9 @@ def main():
     print(f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})")
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
     print(f"  - Multiplication threshold: product of all {args.num_labs} labs > {args.threshold}")
+    print(f"  - True risk determined by CLEAN lab values (no noise)")
+    print(f"  - Observed lab values have {args.noise_level*100:.0f}% noise added")
     print(f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab")
-    print(f"  - Noise level: {args.noise_level}")
 
     # Generate save name dynamically
     noise_suffix = f"_noise{int(args.noise_level*100)}" if args.noise_level > 0 else ""
@@ -589,7 +637,8 @@ def main():
         lab_value_info,
         args.diag_min_days,
         args.diag_max_days,
-        args.noise_level
+        args.noise_level,
+        patient_df
     )
 
     print("\nGenerated data:")
