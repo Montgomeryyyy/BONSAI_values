@@ -21,7 +21,7 @@ from corebehrt.modules.features.values import ValueCreator
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function
-
+from corebehrt.functional.features.values import get_unique_value_counts
 
 def load_tokenize_and_save(
     features_path: str,
@@ -49,6 +49,17 @@ def load_tokenize_and_save(
     torch.save(set(pids), join(tokenized_path, f"pids_{split}.pt"))  # save pids as ints
 
 
+def make_bin_mapping(bin_mapping_func, features_path):
+    """
+    Makes a bin mapping from a function.
+    """
+
+    values_counts = get_unique_value_counts(features_path, splits=["train", "tuning"])    
+    mapping_func = instantiate_function(bin_mapping_func)
+    bin_mapping = {concept: mapping_func(values_counts[concept]) for concept in values_counts}
+    return bin_mapping
+
+
 def create_and_save_features(cfg, splits, logger) -> None:
     """
     Creates features and saves them to disk.
@@ -59,6 +70,10 @@ def create_and_save_features(cfg, splits, logger) -> None:
         f"Initialized combined_patient_info as DataFrame with shape: {combined_patient_info.shape}"
     )
 
+    if "bin_mapping_func" in cfg.features.values.value_creator_kwargs:
+        bin_mapping = make_bin_mapping(cfg.features.values.value_creator_kwargs["bin_mapping_func"], cfg.paths.data)
+    else:
+        bin_mapping = None
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -110,13 +125,12 @@ def create_and_save_features(cfg, splits, logger) -> None:
             total_concepts_after_exclusion += len(concepts)
 
             concepts = create_row_id(concepts)
-            concepts = handle_numeric_values(concepts, cfg.get("features"))
+            concepts = handle_numeric_values(concepts, cfg.get("features"), bin_mapping)
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(concepts)
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
-            print(features.head(50))
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
                 index=False,
@@ -207,7 +221,7 @@ def handle_aggregations(
 
 
 def handle_numeric_values(
-    concepts: pd.DataFrame, features_cfg: dict = None
+    concepts: pd.DataFrame, features_cfg: dict = None, bin_mapping: dict = None
 ) -> pd.DataFrame:
     """
     Process numeric values in concepts DataFrame based on configuration.
@@ -221,9 +235,6 @@ def handle_numeric_values(
         return concepts
 
     if features_cfg and "values" in features_cfg:
-        bin_mapping = features_cfg.values.value_creator_kwargs.get("bin_mapping", None)
-        if bin_mapping is not None:
-            bin_mapping = torch.load(bin_mapping, weights_only=False)
         num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
         add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
         separator_regex = features_cfg.values.value_creator_kwargs.get(
