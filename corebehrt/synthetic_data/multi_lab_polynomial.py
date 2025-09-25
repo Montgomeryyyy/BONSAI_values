@@ -1,22 +1,18 @@
 """
 Generate synthetic data with multiple lab values where positive patients are determined 
-by a multiplication equation: (LAB1 * LAB2 * ... * LABN + noise) > threshold.
-Noise is applied to the product of lab values, not to individual lab values.
-Based on the multi_lab_addition.py structure.
+by a polynomial equation: c0 + c1*LAB1 + c2*LAB2 + ... + cn*LABn + c12*LAB1*LAB2 + ... + noise > threshold.
+Coefficients are drawn uniformly from -1 to 1.
+Based on the multi_lab_multiplication.py structure.
 """
 
 import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Optional, List, Tuple
-import matplotlib.pyplot as plt
-import seaborn as sns
-import os
+from typing import Optional, List, Dict
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 
@@ -25,18 +21,15 @@ N = 100000
 DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1unq.csv"
 PATIENTS_INFO_PATH = f"../../../data/vals/patient_infos/patient_info_{N}n.parquet"
 
-# Lab value distributions - same distribution for all labs by default
+# Lab value distributions - same distribution for all labs
 LAB_MEAN = 0.3  # Mean for all labs
 LAB_STD = 0.1   # Std for all labs
 
-# Alternative: Different means for different labs (creates more realistic separation)
-LAB_MEANS = [0.2, 0.3, 0.4]  # Different means for LAB1, LAB2, LAB3
-USE_DIFFERENT_MEANS = False  # Set to True to use different means
-
-# Number of labs per patient
-NUM_LABS = 3  # Default to 3 labs, can be changed via command line
-MULTIPLICATION_THRESHOLD = 0.024  # 0.2 × 0.3 × 0.4 (product of different lab means)
-NOISE_LEVEL = 0.1  # 10% noise applied to the product of lab values for realistic AUC
+# Polynomial parameters
+NUM_LABS = 2  # Default to 2 labs, can be changed via command line
+NOISE_LEVEL = 0.0  # Multiplicative noise applied to the polynomial result
+POSITIVE_RATE = 0.5  # Default to 50% positive, 50% negative
+POLYNOMIAL_DEGREE = 2  # Default to quadratic (includes interactions)
 
 # Diagnosis timing parameters
 DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
@@ -46,9 +39,88 @@ DEFAULT_WRITE_DIR = f"../../../data/vals/synthetic_data/{N}n/"
 DEFAULT_PLOT_DIR = f"../../../data/vals/synthetic_data_plots/{N}n/"
 POSITIVE_DIAGS = ["S/DIAG_POSITIVE"]
 
-# Define lab value distributions - will be generated dynamically based on num_labs
 
-# Concept relationships are now handled directly in the generation logic
+def generate_polynomial_coefficients(num_labs: int, degree: int, seed: int = None) -> Dict[str, float]:
+    """
+    Generate polynomial coefficients uniformly from -1 to 1.
+    
+    Args:
+        num_labs: Number of lab variables
+        degree: Polynomial degree (1=linear, 2=quadratic with interactions, etc.)
+        seed: Random seed for reproducibility
+        
+    Returns:
+        Dict mapping coefficient names to values
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    coefficients = {}
+    
+    # Constant term
+    coefficients['c0'] = np.random.uniform(-1, 1)
+    
+    # Linear terms
+    for i in range(1, num_labs + 1):
+        coefficients[f'c{i}'] = np.random.uniform(-1, 1)
+    
+    # Higher order terms (interactions)
+    if degree >= 2:
+        # Quadratic terms (LABi * LABj for i <= j)
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                coefficients[f'c{i}{j}'] = np.random.uniform(-1, 1)
+    
+    if degree >= 3:
+        # Cubic terms (LABi * LABj * LABk for i <= j <= k)
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                for k in range(j, num_labs + 1):
+                    coefficients[f'c{i}{j}{k}'] = np.random.uniform(-1, 1)
+    
+    return coefficients
+
+
+def evaluate_polynomial(lab_values: List[float], coefficients: Dict[str, float], num_labs: int, degree: int) -> float:
+    """
+    Evaluate the polynomial function for given lab values.
+    
+    Args:
+        lab_values: List of lab values [LAB1, LAB2, ..., LABn]
+        coefficients: Dictionary of polynomial coefficients
+        num_labs: Number of lab variables
+        degree: Polynomial degree
+        
+    Returns:
+        float: Polynomial evaluation result
+    """
+    result = 0.0
+    
+    # Constant term
+    result += coefficients.get('c0', 0.0)
+    
+    # Linear terms
+    for i in range(1, num_labs + 1):
+        if i <= len(lab_values):
+            result += coefficients.get(f'c{i}', 0.0) * lab_values[i-1]
+    
+    # Higher order terms
+    if degree >= 2:
+        # Quadratic terms (interactions)
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                if i <= len(lab_values) and j <= len(lab_values):
+                    result += coefficients.get(f'c{i}{j}', 0.0) * lab_values[i-1] * lab_values[j-1]
+    
+    if degree >= 3:
+        # Cubic terms
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                for k in range(j, num_labs + 1):
+                    if i <= len(lab_values) and j <= len(lab_values) and k <= len(lab_values):
+                        result += coefficients.get(f'c{i}{j}{k}', 0.0) * lab_values[i-1] * lab_values[j-1] * lab_values[k-1]
+    
+    return result
 
 
 def get_positive_patients(data: pd.DataFrame, positive_diags: list) -> pd.DataFrame:
@@ -101,18 +173,124 @@ def generate_lab_value(lab_name: str, lab_value_info: dict, noise_level: float =
     return base_value
 
 
-def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0) -> pd.DataFrame:
+def print_polynomial_equation(coefficients: Dict[str, float], num_labs: int, degree: int) -> None:
+    """
+    Print the polynomial equation in a readable format.
+    
+    Args:
+        coefficients: Dictionary of polynomial coefficients
+        num_labs: Number of lab variables
+        degree: Polynomial degree
+    """
+    print(f"\nPolynomial equation (degree {degree}):")
+    print("result = ", end="")
+    
+    terms = []
+    
+    # Constant term
+    if 'c0' in coefficients and abs(coefficients['c0']) > 1e-6:
+        terms.append(f"{coefficients['c0']:.3f}")
+    
+    # Linear terms
+    for i in range(1, num_labs + 1):
+        coef_name = f'c{i}'
+        if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
+            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}")
+    
+    # Higher order terms
+    if degree >= 2:
+        # Quadratic terms (interactions)
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                coef_name = f'c{i}{j}'
+                if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
+                    if i == j:
+                        terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}²")
+                    else:
+                        terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}")
+    
+    if degree >= 3:
+        # Cubic terms
+        for i in range(1, num_labs + 1):
+            for j in range(i, num_labs + 1):
+                for k in range(j, num_labs + 1):
+                    coef_name = f'c{i}{j}{k}'
+                    if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
+                        if i == j == k:
+                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}³")
+                        elif i == j:
+                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}²*LAB{k}")
+                        elif j == k:
+                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}²")
+                        else:
+                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}*LAB{k}")
+    
+    if not terms:
+        print("0")
+    else:
+        print(" + ".join(terms).replace("+ -", "- "))
+    print()
+
+
+def find_optimal_threshold(pids_list: List[str], num_labs: int, 
+                          lab_value_info: dict, coefficients: Dict[str, float], 
+                          degree: int, target_positive_rate: float = 0.5) -> float:
+    """
+    Find the threshold that results in the target positive rate.
+    
+    Args:
+        pids_list: List of patient IDs
+        num_labs: Number of labs per patient
+        lab_value_info: Dictionary containing lab distribution information
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
+        target_positive_rate: Target fraction of positive cases (e.g., 0.5 for 50%)
+        
+    Returns:
+        float: Optimal threshold
+    """
+    # Generate a sample of polynomial results to find the threshold
+    sample_size = min(10000, len(pids_list))  # Use up to 10k samples for efficiency
+    sample_pids = np.random.choice(pids_list, size=sample_size, replace=False)
+    
+    polynomial_results = []
+    for pid in sample_pids:
+        # Generate clean lab values
+        clean_lab_values = []
+        for i in range(1, num_labs + 1):
+            lab_concept = f"S/LAB{i}"
+            clean_lab_value = generate_lab_value(lab_concept, lab_value_info, noise_level=0.0)
+            if clean_lab_value is not None:
+                clean_lab_values.append(clean_lab_value)
+        
+        if len(clean_lab_values) == num_labs:
+            # Calculate clean polynomial evaluation
+            clean_polynomial_result = evaluate_polynomial(clean_lab_values, coefficients, num_labs, degree)
+            polynomial_results.append(clean_polynomial_result)
+    
+    # Find threshold that gives target positive rate
+    polynomial_results = np.array(polynomial_results)
+    threshold = np.percentile(polynomial_results, (1 - target_positive_rate) * 100)
+    
+    return threshold
+
+
+def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, 
+                          lab_value_info: dict, coefficients: Dict[str, float], 
+                          degree: int, noise_level: float = 0.0) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
-    Patient risk is determined by product of lab values with noise added to the product > threshold.
-    Individual lab values are clean (no noise), but noise is applied to their product.
+    Patient risk is determined by polynomial evaluation with multiplicative noise > threshold.
+    Individual lab values are clean (no noise), but noise is applied to the polynomial result.
 
     Args:
         pids_list: List of patient IDs
-        threshold: Threshold for product of all labs > threshold equation
+        threshold: Threshold for polynomial evaluation > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
-        noise_level: Amount of noise to add to the product of lab values (multiplicative noise)
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
+        noise_level: Amount of multiplicative noise to add to the polynomial result
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
@@ -133,18 +311,18 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
                 lab_concepts.append(lab_concept)
         
         if len(clean_lab_values) == num_labs:  # Ensure we have all labs
-            # Calculate clean product of all lab values
-            clean_lab_product = np.prod(clean_lab_values)
+            # Calculate clean polynomial evaluation
+            clean_polynomial_result = evaluate_polynomial(clean_lab_values, coefficients, num_labs, degree)
             
-            # Add multiplicative noise to the product, then determine risk
+            # Add multiplicative noise to the polynomial result, then determine risk
             if noise_level > 0:
-                # Multiplicative noise (keeps values positive)
+                # Multiplicative noise (keeps values positive if polynomial result is positive)
                 noise_factor = np.random.normal(1.0, noise_level)
-                noisy_lab_product = clean_lab_product * noise_factor
+                noisy_polynomial_result = clean_polynomial_result * noise_factor
             else:
-                noisy_lab_product = clean_lab_product
+                noisy_polynomial_result = clean_polynomial_result
                 
-            is_high_risk = noisy_lab_product > threshold
+            is_high_risk = noisy_polynomial_result > threshold
                             
             patient_risk_map[pid] = is_high_risk
             condition = "high_risk" if is_high_risk else "low_risk"
@@ -188,7 +366,6 @@ def generate_timestamps(
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
-    Similar to multi_lab_addition.py but adapted for multiple labs per patient.
 
     Args:
         pids_list: List of patient IDs to generate timestamps for
@@ -272,6 +449,8 @@ def generate_synthetic_data(
     threshold: float,
     num_labs: int,
     lab_value_info: dict,
+    coefficients: Dict[str, float],
+    degree: int,
     diag_min_days: int = DIAG_MIN_DAYS,
     diag_max_days: int = DIAG_MAX_DAYS,
     noise_level: float = NOISE_LEVEL,
@@ -279,17 +458,19 @@ def generate_synthetic_data(
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
-    Patient risk is determined by (product of all labs + noise) > threshold.
-    Noise is applied to the product, not to individual lab values.
+    Patient risk is determined by polynomial evaluation with multiplicative noise > threshold.
+    Noise is applied to the polynomial result, not to individual lab values.
     
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
-        threshold: Threshold for (product of all labs + noise) > threshold equation
+        threshold: Threshold for polynomial evaluation > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
         diag_min_days: Minimum days after last lab for diagnosis
         diag_max_days: Maximum days after last lab for diagnosis
-        noise_level: Amount of noise to add to the product of lab values
+        noise_level: Amount of multiplicative noise to add to the polynomial result
         
     Returns:
         pd.DataFrame: Generated synthetic data
@@ -298,7 +479,7 @@ def generate_synthetic_data(
     pids_list = list(input_data["subject_id"].unique())
     
     # Generate concepts and lab values
-    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, noise_level)
+    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, coefficients, degree, noise_level)
 
     # Create final DataFrame - match multi_lab_addition.py structure exactly
     data = pd.DataFrame({
@@ -320,13 +501,15 @@ def generate_synthetic_data(
     return data
 
 
-def print_statistics(data: pd.DataFrame, num_labs: int) -> None:
+def print_statistics(data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int) -> None:
     """
-    Print statistics about the lab values.
+    Print statistics about the lab values and polynomial coefficients.
 
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
     """
     # Recreate is_positive column for analysis
     positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
@@ -356,25 +539,10 @@ def print_statistics(data: pd.DataFrame, num_labs: int) -> None:
     print(f"High-risk patients - Labs per patient: {positive_labs_per_patient.mean():.1f} (should be {num_labs}.0)")
     print(f"Low-risk patients - Labs per patient: {negative_labs_per_patient.mean():.1f} (should be {num_labs}.0)")
     
-    # Calculate multiplication statistics (product of all labs)
-    lab_data_dict = {}
-    for i in range(1, num_labs + 1):
-        lab_data_dict[f"LAB{i}"] = data[data["code"] == f"S/LAB{i}"].groupby("subject_id")["numeric_value"].first()
-    
-    # Calculate product of all labs for each patient
-    # Convert to pandas Series to maintain index information
-    multiplication_scores = pd.Series(np.prod(list(lab_data_dict.values()), axis=0), 
-                                    index=list(lab_data_dict.values())[0].index)
-    
-    positive_multiplication = multiplication_scores[multiplication_scores.index.isin(positive_patients)]
-    negative_multiplication = multiplication_scores[~multiplication_scores.index.isin(positive_patients)]
-    
-    print(f"\nMultiplication equation statistics (product of all {num_labs} labs):")
-    print(f"High-risk patients - Mean: {positive_multiplication.mean():.6f}")
-    print(f"High-risk patients - Std: {positive_multiplication.std():.6f}")
-    print(f"Low-risk patients - Mean: {negative_multiplication.mean():.6f}")
-    print(f"Low-risk patients - Std: {negative_multiplication.std():.6f}")
-    print(f"Threshold: {MULTIPLICATION_THRESHOLD}")
+    # Print polynomial coefficients
+    print(f"\nPolynomial coefficients (degree {degree}):")
+    for coef_name, coef_value in sorted(coefficients.items()):
+        print(f"  {coef_name}: {coef_value:.3f}")
     
     # Verify that every patient has a diagnosis
     total_patients = data["subject_id"].nunique()
@@ -389,88 +557,21 @@ def print_statistics(data: pd.DataFrame, num_labs: int) -> None:
     print(f"Coverage: {(patients_with_positive_diag + patients_with_negative_diag) / total_patients * 100:.1f}%")
 
 
-def create_distribution_plot(
-    data: pd.DataFrame, save_path: Path, num_labs: int
-) -> None:
+def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int) -> dict:
     """
-    Create a figure showing the distribution of lab values and multiplication scores.
-
-    Args:
-        data: DataFrame containing the synthetic data
-        save_path: Path to save the plot
-        num_labs: Number of labs per patient
-    """
-    # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    
-    # Create subplots - show first 3 labs and multiplication scores
-    n_cols = min(4, num_labs + 1)  # Show up to 3 labs + multiplication scores
-    fig, axes = plt.subplots(1, n_cols, figsize=(6 * n_cols, 6))
-    if n_cols == 1:
-        axes = [axes]
-
-    # Plot individual lab distributions (up to 3 labs)
-    for i in range(min(3, num_labs)):
-        lab_mask = data["code"] == f"S/LAB{i+1}"
-        lab_data = data[lab_mask].copy()
-        lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients)
-        
-        positive_values = lab_data[lab_data["is_positive"]]["numeric_value"]
-        negative_values = lab_data[~lab_data["is_positive"]]["numeric_value"]
-
-        axes[i].hist(positive_values, bins=30, alpha=0.7, label="High-Risk Patients", color="red")
-        axes[i].hist(negative_values, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue")
-        axes[i].set_xlabel(f"LAB{i+1} Value")
-        axes[i].set_ylabel("Count")
-        axes[i].set_title(f"Distribution of LAB{i+1} Values")
-        axes[i].legend()
-        axes[i].grid(True, alpha=0.3)
-
-    # Plot multiplication scores (product of all labs)
-    lab_data_dict = {}
-    for i in range(1, num_labs + 1):
-        lab_data_dict[f"LAB{i}"] = data[data["code"] == f"S/LAB{i}"].groupby("subject_id")["numeric_value"].first()
-    
-    # Calculate product of all labs for each patient
-    # Convert to pandas Series to maintain index information
-    multiplication_scores = pd.Series(np.prod(list(lab_data_dict.values()), axis=0), 
-                                    index=list(lab_data_dict.values())[0].index)
-    
-    positive_multiplication = multiplication_scores[multiplication_scores.index.isin(positive_patients)]
-    negative_multiplication = multiplication_scores[~multiplication_scores.index.isin(positive_patients)]
-
-    ax_idx = min(3, num_labs)  # Index for multiplication scores plot
-    axes[ax_idx].hist(positive_multiplication, bins=30, alpha=0.7, label="High-Risk Patients", color="red")
-    axes[ax_idx].hist(negative_multiplication, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue")
-    axes[ax_idx].axvline(MULTIPLICATION_THRESHOLD, color='black', linestyle='--', linewidth=2, label=f'Threshold: {MULTIPLICATION_THRESHOLD}')
-    axes[ax_idx].set_xlabel(f"Product of All {num_labs} Labs")
-    axes[ax_idx].set_ylabel("Number of Patients")
-    axes[ax_idx].set_title(f"Distribution of Multiplication Scores (Product of {num_labs} Labs)")
-    axes[ax_idx].legend()
-    axes[ax_idx].grid(True, alpha=0.3)
-    axes[ax_idx].set_xscale('log')  # Use log scale for better visualization of small products
-
-    plt.tight_layout()
-    os.makedirs(save_path.parent, exist_ok=True)
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close()
-
-    print(f"Distribution plot saved to {save_path}")
-
-
-def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int) -> dict:
-    """
-    Calculate the theoretical performance of the model based on multiplication equation.
+    Calculate the theoretical performance of the model based on polynomial equation.
 
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
         
     Returns:
         dict: Dictionary containing performance metrics
     """
-    # Calculate multiplication-based AUC
-    multiplication_auc = calculate_multiplication_auc(data, num_labs)
+    # Calculate polynomial-based AUC
+    polynomial_auc = calculate_polynomial_auc(data, num_labs, coefficients, degree)
     
     # Calculate other metrics
     sweep_auc = sweep_threshold_auc(data)
@@ -478,22 +579,22 @@ def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int) -> dict
     cohens_d_metric = cohens_d(data)
     
     print("\nTheoretical performance:")
-    print(f"Multiplication-based AUC (clean product vs noisy ground truth): {multiplication_auc}")
+    print(f"Polynomial-based AUC (clean polynomial vs noisy ground truth): {polynomial_auc}")
     print(f"Sweep AUC (LAB1 only): {sweep_auc}")
     print(f"Scipy Mann-Whitney U (LAB1 only): {scipy_mann_whitney_u_auc}")
     print(f"Cohen's d (LAB1 only): {cohens_d_metric}")
     
     return {
-        "multiplication_auc": multiplication_auc,
+        "polynomial_auc": polynomial_auc,
         "sweep_auc": sweep_auc,
         "scipy_mann_whitney_u_auc": scipy_mann_whitney_u_auc,
         "cohens_d_metric": cohens_d_metric,
     }
 
 
-def calculate_multiplication_auc(data: pd.DataFrame, num_labs: int) -> float:
+def calculate_polynomial_auc(data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int) -> float:
     """
-    Calculate AUC for detecting high-risk patients based on product of all labs > threshold.
+    Calculate AUC for detecting high-risk patients based on polynomial evaluation.
     
     Note: This calculates the theoretical maximum AUC that a perfect model could achieve
     using the clean lab values to predict the noisy ground truth labels.
@@ -501,32 +602,38 @@ def calculate_multiplication_auc(data: pd.DataFrame, num_labs: int) -> float:
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
+        coefficients: Dictionary of polynomial coefficients
+        degree: Polynomial degree
         
     Returns:
-        float: AUC for multiplication-based detection
+        float: AUC for polynomial-based detection
     """
     # Get lab values for each patient (these are clean, no noise)
     lab_data_dict = {}
     for i in range(1, num_labs + 1):
         lab_data_dict[f"LAB{i}"] = data[data['code'] == f'S/LAB{i}'].groupby("subject_id")["numeric_value"].first()
     
-    # Get patient risks (these are based on noisy product + threshold)
+    # Get patient risks (these are based on noisy polynomial + threshold)
     positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
     patient_risks = list(lab_data_dict.values())[0].index.isin(positive_patients)
     
-    # Calculate product of all labs for each patient (clean product)
-    # Convert to pandas Series to maintain index information
-    multiplication_scores = pd.Series(np.prod(list(lab_data_dict.values()), axis=0), 
-                                    index=list(lab_data_dict.values())[0].index)
+    # Calculate actual polynomial scores for each patient
+    polynomial_scores = []
+    for patient_id in list(lab_data_dict.values())[0].index:
+        lab_values = [lab_data_dict[f"LAB{i}"][patient_id] for i in range(1, num_labs + 1)]
+        polynomial_score = evaluate_polynomial(lab_values, coefficients, num_labs, degree)
+        polynomial_scores.append(polynomial_score)
+    
+    polynomial_scores = np.array(polynomial_scores)
     
     from sklearn.metrics import roc_auc_score
-    auc = roc_auc_score(patient_risks, multiplication_scores)
+    auc = roc_auc_score(patient_risks, polynomial_scores)
     return auc
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by (product of all labs + noise) > threshold"
+        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by polynomial evaluation with multiplicative noise > threshold"
     )
     parser.add_argument(
         "--input_file",
@@ -541,10 +648,10 @@ def main():
         help="Number of labs per patient",
     )
     parser.add_argument(
-        "--threshold",
-        type=float,
-        default=MULTIPLICATION_THRESHOLD,
-        help="Threshold for (product of all labs + noise) > threshold equation",
+        "--degree",
+        type=int,
+        default=POLYNOMIAL_DEGREE,
+        help="Polynomial degree (1=linear, 2=quadratic with interactions, etc.)",
     )
     parser.add_argument(
         "--diag_min_days",
@@ -568,13 +675,25 @@ def main():
         "--noise_level",
         type=float,
         default=NOISE_LEVEL,
-        help="Multiplicative noise level for the product of lab values (0.0 = no noise, 0.1 = 10% noise)",
+        help="Multiplicative noise level for the polynomial result (0.0 = no noise, 0.1 = 10% noise)",
     )
     parser.add_argument(
         "--patient_info_path",
         type=str,
         default=PATIENTS_INFO_PATH,
         help="Path to patient information parquet file (optional, for realistic birth/death dates)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for coefficient generation (for reproducibility)",
+    )
+    parser.add_argument(
+        "--positive_rate",
+        type=float,
+        default=POSITIVE_RATE,
+        help="Target positive rate (fraction of patients that should be positive, e.g., 0.5 for 50%)",
     )
 
     args = parser.parse_args()
@@ -604,42 +723,50 @@ def main():
     print(f"Total records: {len(input_data)}")
     print(f"Total patients: {input_data['subject_id'].nunique()}")
 
+    # Generate polynomial coefficients
+    coefficients = generate_polynomial_coefficients(args.num_labs, args.degree, args.seed)
+    
+    # Print the polynomial equation
+    print_polynomial_equation(coefficients, args.num_labs, args.degree)
+    
+    # Generate lab value info for threshold calculation
+    lab_value_info = {}
+    for i in range(1, args.num_labs + 1):
+        lab_value_info[f"S/LAB{i}"] = {
+            "distribution": {
+                "dist": "normal",
+                "mean": LAB_MEAN,
+                "std": LAB_STD,
+            },
+        }
+    
+    # Find optimal threshold for target positive rate
+    pids_list = list(input_data["subject_id"].unique())
+    optimal_threshold = find_optimal_threshold(pids_list, args.num_labs, lab_value_info, coefficients, args.degree, args.positive_rate)
+    
     print(f"\nGenerating synthetic data with:")
     print(f"  - {input_data['subject_id'].nunique()} patients")
     print(f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})")
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
-    print(f"  - Multiplication threshold: (product of all {args.num_labs} labs + noise) > {args.threshold}")
+    print(f"  - Polynomial degree: {args.degree}")
+    print(f"  - Optimal threshold for {args.positive_rate*100:.0f}% positive rate: {optimal_threshold:.6f}")
     print(f"  - Individual lab values are clean (no noise)")
-    print(f"  - Multiplicative noise ({args.noise_level*100:.0f}%) is applied to the product of lab values")
+    print(f"  - Multiplicative noise ({args.noise_level*100:.0f}%) is applied to the polynomial result")
     print(f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab")
 
     # Generate save name dynamically
     noise_suffix = f"_noise{int(args.noise_level*100)}" if args.noise_level > 0 else ""
-    save_name = f"n_lab_multiplication_{args.num_labs}labs_mean{int(LAB_MEAN*100)}p{int(LAB_STD*100)}{noise_suffix}_n{N}"
+    seed_suffix = f"_seed{args.seed}" if args.seed is not None else ""
+    save_name = f"n_lab_polynomial_{args.num_labs}labs_deg{args.degree}_mean{int(LAB_MEAN*100)}p{int(LAB_STD*100)}{noise_suffix}{seed_suffix}_n{N}"
 
-    # Generate lab value info dynamically
-    lab_value_info = {}
-    for i in range(1, args.num_labs + 1):
-        # Use different means if specified, otherwise use same mean for all labs
-        if USE_DIFFERENT_MEANS and i <= len(LAB_MEANS):
-            lab_mean = LAB_MEANS[i-1]
-        else:
-            lab_mean = LAB_MEAN
-            
-        lab_value_info[f"S/LAB{i}"] = {
-            "distribution": {
-                "dist": "normal",
-                "mean": lab_mean,
-                "std": LAB_STD,
-            },
-        }
-
-    # Generate synthetic data
+    # Generate synthetic data using optimal threshold
     data = generate_synthetic_data(
         input_data,
-        args.threshold,
+        optimal_threshold,  # Use optimal threshold instead of args.threshold
         args.num_labs,
         lab_value_info,
+        coefficients,
+        args.degree,
         args.diag_min_days,
         args.diag_max_days,
         args.noise_level,
@@ -650,7 +777,7 @@ def main():
     print(data.head())
 
     # Print statistics
-    print_statistics(data, args.num_labs)
+    print_statistics(data, args.num_labs, coefficients, args.degree)
 
     # Write to CSV
     write_dir = Path(args.write_dir)
@@ -685,8 +812,7 @@ def main():
     print(f"Saved min-max normalized data to {normalized_filename}")
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(data, args.num_labs)
-
+    performance_metrics = calculate_theoretical_performance(data, args.num_labs, coefficients, args.degree)
 
 if __name__ == "__main__":
     main()

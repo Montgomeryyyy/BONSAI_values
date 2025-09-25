@@ -27,6 +27,7 @@ PATIENTS_INFO_PATH = f"../../../data/vals/patient_infos/patient_info_{N}n.parque
 # Number of labs per patient
 NUM_LABS = 3  # Default to 3 labs, can be changed via command line
 ADDITION_THRESHOLD = 0.9  # Threshold for sum of all labs > threshold
+NOISE_LEVEL = 0.1  # 10% noise applied to the sum of lab values for realistic AUC
 
 # Lab value distributions - same distribution for all labs by default
 LAB_MEAN = 0.3  # Mean for all labs
@@ -86,7 +87,7 @@ def generate_lab_value(lab_name: str, lab_value_info: dict) -> Optional[float]:
     return None
 
 
-def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_labs: int, lab_value_info: dict) -> pd.DataFrame:
+def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for a batch of patients.
     Memory-optimized version that processes patients in smaller batches.
@@ -96,6 +97,7 @@ def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_l
         threshold: Threshold for sum of all labs > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
+        noise_level: Amount of noise to add to the sum of lab values (0.0 = no noise, 0.1 = 10% noise)
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
@@ -117,7 +119,16 @@ def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_l
     
     # Calculate sums and determine risk for all patients at once
     lab_sums = np.sum(lab_values_batch, axis=1)
-    is_high_risk_batch = lab_sums > threshold
+    
+    # Add noise to the sum if specified
+    if noise_level > 0:
+        # Add multiplicative noise to the sum (keeps values positive)
+        noise_factor = np.random.normal(1.0, noise_level, batch_size)
+        noisy_lab_sums = lab_sums * noise_factor
+    else:
+        noisy_lab_sums = lab_sums
+    
+    is_high_risk_batch = noisy_lab_sums > threshold
     
     # Build records for the batch
     for batch_idx, pid in enumerate(pids_batch):
@@ -146,7 +157,7 @@ def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_l
     return pd.DataFrame(records)
 
 
-def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, batch_size: int = 1000) -> pd.DataFrame:
+def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, batch_size: int = 1000, noise_level: float = 0.0) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
     Memory-optimized version that processes patients in batches.
@@ -157,6 +168,7 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
         batch_size: Number of patients to process at once
+        noise_level: Amount of noise to add to the sum of lab values (0.0 = no noise, 0.1 = 10% noise)
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
@@ -174,7 +186,7 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
         print(f"Processing batch {i//batch_size + 1}/{(total_patients + batch_size - 1)//batch_size} ({len(pids_batch)} patients)")
         
         # Generate data for this batch
-        batch_df = generate_n_lab_concepts_batch(pids_batch, threshold, num_labs, lab_value_info)
+        batch_df = generate_n_lab_concepts_batch(pids_batch, threshold, num_labs, lab_value_info, noise_level)
         all_records.append(batch_df)
         
         # Clear memory
@@ -291,19 +303,24 @@ def generate_synthetic_data(
     diag_min_days: int = DIAG_MIN_DAYS,
     diag_max_days: int = DIAG_MAX_DAYS,
     patient_df: pd.DataFrame = None,
-    batch_size: int = 1000
+    batch_size: int = 1000,
+    noise_level: float = NOISE_LEVEL
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
-    Patient risk is determined by sum of all labs > threshold.
+    Patient risk is determined by (sum of all labs + noise) > threshold.
+    Noise is applied to the sum, not to individual lab values.
     
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
-        threshold: Threshold for sum of all labs > threshold equation
+        threshold: Threshold for (sum of all labs + noise) > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
         diag_min_days: Minimum days after last lab for diagnosis
         diag_max_days: Maximum days after last lab for diagnosis
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
+        batch_size: Number of patients to process at once
+        noise_level: Amount of noise to add to the sum of lab values
         
     Returns:
         pd.DataFrame: Generated synthetic data
@@ -312,7 +329,7 @@ def generate_synthetic_data(
     pids_list = list(input_data["subject_id"].unique())
     
     # Generate concepts and lab values
-    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, batch_size)
+    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, batch_size, noise_level)
 
     # Create final DataFrame - match multi_lab_frequency.py structure exactly
     data = pd.DataFrame({
@@ -487,10 +504,10 @@ def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int) -> dict
     cohens_d_metric = cohens_d(data)
     
     print("\nTheoretical performance:")
-    print(f"Addition-based AUC (sum of {num_labs} labs): {addition_auc}")
-    print(f"Sweep AUC: {sweep_auc}")
-    print(f"Scipy Mann-Whitney U: {scipy_mann_whitney_u_auc}")
-    print(f"Cohen's d: {cohens_d_metric}")
+    print(f"Addition-based AUC (clean sum vs noisy ground truth): {addition_auc}")
+    print(f"Sweep AUC (LAB1 only): {sweep_auc}")
+    print(f"Scipy Mann-Whitney U (LAB1 only): {scipy_mann_whitney_u_auc}")
+    print(f"Cohen's d (LAB1 only): {cohens_d_metric}")
     
     return {
         "addition_auc": addition_auc,
@@ -504,6 +521,9 @@ def calculate_addition_auc(data: pd.DataFrame, num_labs: int) -> float:
     """
     Calculate AUC for detecting high-risk patients based on sum of all labs > threshold.
     
+    Note: This calculates the theoretical maximum AUC that a perfect model could achieve
+    using the clean lab values to predict the noisy ground truth labels.
+    
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
@@ -511,16 +531,16 @@ def calculate_addition_auc(data: pd.DataFrame, num_labs: int) -> float:
     Returns:
         float: AUC for addition-based detection
     """
-    # Get lab values for each patient
+    # Get lab values for each patient (these are clean, no noise)
     lab_data_dict = {}
     for i in range(1, num_labs + 1):
         lab_data_dict[f"LAB{i}"] = data[data['code'] == f'S/LAB{i}'].groupby("subject_id")["numeric_value"].first()
     
-    # Get patient risks
+    # Get patient risks (these are based on noisy sum + threshold)
     positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
     patient_risks = list(lab_data_dict.values())[0].index.isin(positive_patients)
     
-    # Calculate sum of all labs for each patient
+    # Calculate sum of all labs for each patient (clean sum)
     addition_scores = sum(lab_data_dict.values())
     
     from sklearn.metrics import roc_auc_score
@@ -530,7 +550,7 @@ def calculate_addition_auc(data: pd.DataFrame, num_labs: int) -> float:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by sum of all labs > threshold"
+        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by (sum of all labs + noise) > threshold"
     )
     parser.add_argument(
         "--input_file",
@@ -548,7 +568,7 @@ def main():
         "--threshold",
         type=float,
         default=ADDITION_THRESHOLD,
-        help="Threshold for sum of all labs > threshold equation",
+        help="Threshold for (sum of all labs + noise) > threshold equation",
     )
     parser.add_argument(
         "--diag_min_days",
@@ -579,6 +599,12 @@ def main():
         type=int,
         default=1000,
         help="Number of patients to process at once (reduce if memory issues)",
+    )
+    parser.add_argument(
+        "--noise_level",
+        type=float,
+        default=NOISE_LEVEL,
+        help="Multiplicative noise level for the sum of lab values (0.0 = no noise, 0.1 = 10% noise)",
     )
 
     args = parser.parse_args()
@@ -626,11 +652,14 @@ def main():
     print(f"  - {input_data['subject_id'].nunique()} patients")
     print(f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})")
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
-    print(f"  - Addition threshold: sum of all {args.num_labs} labs > {args.threshold}")
+    print(f"  - Addition threshold: (sum of all {args.num_labs} labs + noise) > {args.threshold}")
+    print(f"  - Individual lab values are clean (no noise)")
+    print(f"  - Multiplicative noise ({args.noise_level*100:.0f}%) is applied to the sum of lab values")
     print(f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab")
 
     # Generate save name dynamically
-    save_name = f"n_lab_addition_{args.num_labs}labs_mean{int(LAB_MEAN*100)}p{int(LAB_STD*100)}_thresh{int(args.threshold*100)}_n{N}"
+    noise_suffix = f"_noise{int(args.noise_level*100)}" if args.noise_level > 0 else ""
+    save_name = f"n_lab_addition_{args.num_labs}labs_mean{int(LAB_MEAN*100)}p{int(LAB_STD*100)}{noise_suffix}_n{N}"
 
     # Generate lab value info dynamically
     lab_value_info = {}
@@ -652,7 +681,8 @@ def main():
         args.diag_min_days,
         args.diag_max_days,
         patient_df,
-        args.batch_size
+        args.batch_size,
+        args.noise_level
     )
 
     print("\nGenerated data:")
@@ -695,12 +725,6 @@ def main():
 
     # Calculate theoretical performance
     performance_metrics = calculate_theoretical_performance(data, args.num_labs)
-
-    # Create plots
-    plot_dir = Path(DEFAULT_PLOT_DIR)
-    plot_dir.mkdir(parents=True, exist_ok=True)
-    
-    create_distribution_plot(data, plot_dir / f"{save_name}_distribution.png", args.num_labs)
 
 
 if __name__ == "__main__":
