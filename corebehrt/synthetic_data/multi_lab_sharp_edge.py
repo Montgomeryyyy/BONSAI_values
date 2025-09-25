@@ -23,15 +23,21 @@ from sklearn.metrics import roc_auc_score
 # Default parameters
 N = 100000
 DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1unq.csv"
+PATIENTS_INFO_PATH = f"../../../data/vals/patient_infos/patient_info_{N}n.parquet"
+
 MIN_LABS_PER_PATIENT = 3
 MAX_LABS_PER_PATIENT = 10
 SWITCHING_PROBABILITY = 1.0  # 100% probability of switching for high-risk patients
 LOW_MEAN = 0.45
 HIGH_MEAN = 0.55
 STD = 0.10
+
+# Diagnosis timing parameters
+DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
+DIAG_MAX_DAYS = 180  # Maximum days after last lab for diagnosis
+
 DEFAULT_WRITE_DIR = f"../../../data/vals/synthetic_data/{N}n/"
 DEFAULT_PLOT_DIR = f"../../../data/vals/synthetic_data_plots/{N}n/"
-SAVE_NAME = f"multi_lab_switching_risk_labs{MIN_LABS_PER_PATIENT}_{MAX_LABS_PER_PATIENT}_switch{int(SWITCHING_PROBABILITY*100)}_n{N}_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
 POSITIVE_DIAGS = ["S/DIAG_POSITIVE"]
 
 # Define lab value distributions
@@ -221,16 +227,20 @@ def generate_multi_lab_concepts(pids_list: List[str], min_labs: int, max_labs: i
 
 
 def generate_timestamps(
-    pids_list: List[str], concepts: List[str], lab_indices: List[int]
+    pids_list: List[str], concepts: List[str], lab_indices: List[int], 
+    diag_min_days: int = DIAG_MIN_DAYS, diag_max_days: int = DIAG_MAX_DAYS, patient_df: pd.DataFrame = None
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
-    Similar to simulate_synthetic_labs.py but adapted for multiple labs per patient.
+    Similar to multi_lab_addition.py but adapted for multiple labs per patient.
 
     Args:
         pids_list: List of patient IDs to generate timestamps for
         concepts: List of concepts corresponding to each PID
         lab_indices: List of lab indices corresponding to each record
+        diag_min_days: Minimum days after last lab for diagnosis
+        diag_max_days: Maximum days after last lab for diagnosis
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
 
     Returns:
         List[pd.Timestamp]: List of generated timestamps
@@ -242,40 +252,77 @@ def generate_timestamps(
         # Initialize patient's concept timestamps if not exists
         if pid not in concept_timestamps:
             concept_timestamps[pid] = {}
-            # Generate a random start time for this patient (within the last 2 years)
-            # Use seconds precision to match simulate_synthetic_labs.py format
-            start_time = pd.Timestamp(year=2016, month=1, day=1)
-            end_time = pd.Timestamp(year=2025, month=1, day=1)
-            time_diff = (end_time - start_time).total_seconds()
-            random_seconds = np.random.randint(0, int(time_diff))
-            concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
-
-        # Find the base concept and its time relationship for this concept
-        time_relationship = None
-        base_concept = None
-
-        for bc, info in CONCEPT_RELATIONSHIPS.items():
-            if concept in info.get("related_concepts", {}):
-                time_relationship = info["related_concepts"][concept].get("time_relationship")
-                base_concept = bc
-                break
-
-        if time_relationship and base_concept:
-            # If we have a time relationship and the base concept exists for this patient
-            if base_concept in concept_timestamps[pid]:
-                base_timestamp = concept_timestamps[pid][base_concept]
-                if time_relationship["type"] == "after":
-                    # Generate timestamp after the base concept
-                    max_days = time_relationship["max_days"]
-                    min_days = time_relationship["min_days"]
-                    days_after = np.random.randint(min_days, max_days + 1)
-                    timestamp = base_timestamp + pd.Timedelta(days=days_after)
+            
+            # Get patient birth and death dates from patient_df
+            if patient_df is not None:
+                # Check if patient exists in patient_df
+                patient_matches = patient_df[patient_df["subject_id"] == pid]
+                if len(patient_matches) > 0:
+                    patient_info = patient_matches.iloc[0]
+                    birthdate = pd.to_datetime(patient_info["birthdate"])
+                    
+                    # Handle deathdate - if NaT, use a default future date
+                    deathdate = pd.to_datetime(patient_info["deathdate"])
+                    if pd.isna(deathdate):
+                        deathdate = pd.Timestamp(year=2025, month=1, day=1)
+                        
+                    # Ensure deathdate is after birthdate
+                    if deathdate <= birthdate:
+                        deathdate = birthdate + pd.Timedelta(days=1)
+                        
+                    # Generate a random start time for this patient between birth and death
+                    time_diff = (deathdate - birthdate).total_seconds()
+                    random_seconds = np.random.randint(0, int(time_diff))
+                    concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["birthdate"] = birthdate
+                    concept_timestamps[pid]["deathdate"] = deathdate
+                else:
+                    # Patient not found in patient_df, use default time range
+                    start_time = pd.Timestamp(year=2016, month=1, day=1)
+                    end_time = pd.Timestamp(year=2025, month=1, day=1)
+                    time_diff = (end_time - start_time).total_seconds()
+                    random_seconds = np.random.randint(0, int(time_diff))
+                    concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["birthdate"] = start_time
+                    concept_timestamps[pid]["deathdate"] = end_time
             else:
-                # If base concept doesn't exist yet, generate a random timestamp
+                # Fallback to default time range if no patient_df provided
+                start_time = pd.Timestamp(year=2016, month=1, day=1)
+                end_time = pd.Timestamp(year=2025, month=1, day=1)
+                time_diff = (end_time - start_time).total_seconds()
+                random_seconds = np.random.randint(0, int(time_diff))
+                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                concept_timestamps[pid]["birthdate"] = start_time
+                concept_timestamps[pid]["deathdate"] = end_time
+
+        # Handle timestamps based on concept type
+        if concept in ["S/DIAG_POSITIVE", "S/DIAG_NEGATIVE"]:
+            # Diagnosis concepts come after the last lab (configurable days after last lab)
+            # Find the latest lab timestamp for this patient
+            lab_timestamps = [ts for lab_concept, ts in concept_timestamps[pid].items() 
+                            if lab_concept.startswith("S/LAB") and lab_concept != "start_time"]
+            if lab_timestamps:
+                # Use the latest lab timestamp as base
+                base_timestamp = max(lab_timestamps)
+                days_after = np.random.randint(diag_min_days, diag_max_days + 1)
+                timestamp = base_timestamp + pd.Timedelta(days=days_after)
+                
+                # Ensure timestamp is not after death date
+                if patient_df is not None:
+                    patient_matches = patient_df[patient_df["subject_id"] == pid]
+                    if len(patient_matches) > 0:
+                        patient_info = patient_matches.iloc[0]
+                        deathdate = pd.to_datetime(patient_info["deathdate"])
+                        if pd.isna(deathdate):
+                            deathdate = pd.Timestamp(year=2025, month=1, day=1)
+                        if timestamp > deathdate:
+                            timestamp = deathdate - pd.Timedelta(days=1)
+            else:
+                # If no lab exists yet, generate a random timestamp
                 start_time = concept_timestamps[pid]["start_time"]
                 timestamp = start_time + pd.Timedelta(days=np.random.randint(0, 365))
         else:
-            # For base concepts (labs), generate timestamp based on lab index
+            # For lab concepts, generate timestamp based on lab index
             start_time = concept_timestamps[pid]["start_time"]
             if lab_index == 0:
                 timestamp = start_time
@@ -283,6 +330,17 @@ def generate_timestamps(
                 # Each subsequent lab is 1-30 days after the previous
                 days_offset = sum(np.random.randint(1, 31) for _ in range(lab_index))
                 timestamp = start_time + pd.Timedelta(days=days_offset)
+                
+                # Ensure timestamp is not after death date
+                if patient_df is not None:
+                    patient_matches = patient_df[patient_df["subject_id"] == pid]
+                    if len(patient_matches) > 0:
+                        patient_info = patient_matches.iloc[0]
+                        deathdate = pd.to_datetime(patient_info["deathdate"])
+                        if pd.isna(deathdate):
+                            deathdate = pd.Timestamp(year=2025, month=1, day=1)
+                        if timestamp > deathdate:
+                            timestamp = deathdate - pd.Timedelta(days=1)
 
         # Store the timestamp for this concept
         concept_timestamps[pid][concept] = timestamp
@@ -295,7 +353,8 @@ def generate_synthetic_data(
     input_data: pd.DataFrame,
     min_labs_per_patient: int,
     max_labs_per_patient: int,
-    switching_probability: float = 1.0
+    switching_probability: float = 1.0,
+    patient_df: pd.DataFrame = None
 ) -> pd.DataFrame:
     """
     Generate synthetic data with multiple lab values per patient.
@@ -306,6 +365,7 @@ def generate_synthetic_data(
         min_labs_per_patient: Minimum number of lab values per patient
         max_labs_per_patient: Maximum number of lab values per patient
         switching_probability: Probability of switching distributions for high-risk patients
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
         
     Returns:
         pd.DataFrame: Generated synthetic data
@@ -337,10 +397,64 @@ def generate_synthetic_data(
     data["time"] = generate_timestamps(
         data["subject_id"].tolist(), 
         data["code"].tolist(),
-        concepts_data["LAB_INDEX"].tolist()
+        concepts_data["LAB_INDEX"].tolist(),
+        DIAG_MIN_DAYS,
+        DIAG_MAX_DAYS,
+        patient_df
     )
 
     return data
+
+
+def validate_timestamps(data: pd.DataFrame, patient_df: pd.DataFrame = None) -> None:
+    """
+    Validate that all timestamps fall between birth and death dates.
+    Optimized version using vectorized operations.
+    
+    Args:
+        data: DataFrame containing the synthetic data with timestamps
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
+    """
+    if patient_df is None:
+        print("No patient data provided - skipping timestamp validation")
+        return
+        
+    print("\nValidating timestamps against birth/death dates...")
+    
+    # Merge data with patient info for vectorized validation
+    merged_data = data.merge(patient_df[["subject_id", "birthdate", "deathdate"]], on="subject_id", how="left")
+    
+    # Handle missing death dates
+    merged_data["deathdate"] = pd.to_datetime(merged_data["deathdate"])
+    merged_data.loc[merged_data["deathdate"].isna(), "deathdate"] = pd.Timestamp(year=2025, month=1, day=1)
+    
+    # Convert birthdate to datetime
+    merged_data["birthdate"] = pd.to_datetime(merged_data["birthdate"])
+    
+    # Vectorized validation
+    before_birth = merged_data["time"] < merged_data["birthdate"]
+    after_death = merged_data["time"] > merged_data["deathdate"]
+    violations = before_birth | after_death
+    
+    total_checks = len(merged_data)
+    violation_count = violations.sum()
+    
+    if violation_count > 0:
+        # Show first few violations for debugging
+        violation_data = merged_data[violations][["subject_id", "time", "birthdate", "deathdate"]].head(5)
+        print(f"First few violations:")
+        for _, row in violation_data.iterrows():
+            print(f"  Patient {row['subject_id']}: timestamp {row['time']} outside birth ({row['birthdate']}) - death ({row['deathdate']}) range")
+        if violation_count > 5:
+            print(f"  ... and {violation_count - 5} more violations")
+    
+    print(f"Timestamp validation complete:")
+    print(f"  Total timestamp checks: {total_checks}")
+    print(f"  Violations found: {violation_count}")
+    if violation_count == 0:
+        print("  ✓ All timestamps are within birth/death date constraints")
+    else:
+        print(f"  ✗ {violation_count} timestamps violate birth/death date constraints")
 
 
 def print_statistics(data: pd.DataFrame) -> None:
@@ -450,6 +564,12 @@ def main():
         default=DEFAULT_WRITE_DIR,
         help="Directory to write output files",
     )
+    parser.add_argument(
+        "--patient_info_path",
+        type=str,
+        default=PATIENTS_INFO_PATH,
+        help="Path to patient information parquet file with birthdate and deathdate columns",
+    )
 
     args = parser.parse_args()
 
@@ -459,6 +579,20 @@ def main():
     except FileNotFoundError:
         print(f"Error: Could not find input file at {args.input_file}")
         return
+
+    # Read patient data
+    patient_df = None
+    try:
+        patient_df = pd.read_parquet(args.patient_info_path)
+        print(f"Loaded patient data from {args.patient_info_path}")
+        print(f"Patient data shape: {patient_df.shape}")
+        print(f"Patient data columns: {list(patient_df.columns)}")
+    except FileNotFoundError:
+        print(f"Warning: Could not find patient info file at {args.patient_info_path}")
+        print("Proceeding without birth/death date constraints")
+    except Exception as e:
+        print(f"Warning: Error loading patient data: {e}")
+        print("Proceeding without birth/death date constraints")
 
     print("Initial data:")
     print(input_data.head())
@@ -490,7 +624,8 @@ def main():
         input_data,
         args.min_labs_per_patient,
         args.max_labs_per_patient,
-        args.switching_probability
+        args.switching_probability,
+        patient_df
     )
 
     print("\nGenerated data:")
@@ -498,12 +633,18 @@ def main():
 
     # Print statistics
     print_statistics(data)
+    
+    # Validate timestamps against birth/death dates
+    validate_timestamps(data, patient_df)
+
+    # Generate save name dynamically
+    save_name = f"multi_lab_switching_risk_labs{args.min_labs_per_patient}_{args.max_labs_per_patient}_switch{int(args.switching_probability*100)}_n{N}_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
 
     # Write to CSV
     write_dir = Path(args.write_dir)
     write_dir.mkdir(parents=True, exist_ok=True)
-    data.to_csv(write_dir / f"{SAVE_NAME}.csv", index=False)
-    print(f"\nSaved synthetic data to {write_dir / f'{SAVE_NAME}.csv'}")
+    data.to_csv(write_dir / f"{save_name}.csv", index=False)
+    print(f"\nSaved synthetic data to {write_dir / f'{save_name}.csv'}")
 
     # Min-max normalize numeric_value for S/LAB1 and save as a separate file
     normalized_data = data.copy()
@@ -518,7 +659,7 @@ def main():
         else:
             normalized_data.loc[lab_mask, "numeric_value"] = 0.0
     
-    normalized_filename = write_dir / f"{SAVE_NAME}_minmaxnorm.csv"
+    normalized_filename = write_dir / f"{save_name}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
 
     # Calculate theoretical AUC
