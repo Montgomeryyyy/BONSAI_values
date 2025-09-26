@@ -34,9 +34,12 @@ LAB_MEANS = [0.2, 0.3, 0.4]  # Different means for LAB1, LAB2, LAB3
 USE_DIFFERENT_MEANS = False  # Set to True to use different means
 
 # Number of labs per patient
-NUM_LABS = 3  # Default to 3 labs, can be changed via command line
-MULTIPLICATION_THRESHOLD = 0.024  # 0.2 × 0.3 × 0.4 (product of different lab means)
-NOISE_LEVEL = 0.1  # 10% noise applied to the product of lab values for realistic AUC
+NUM_LABS = 4  # Default to 3 labs, can be changed via command line
+MULTIPLICATION_THRESHOLD = 0.3**NUM_LABS  # 0.2 × 0.3 × 0.4 (product of different lab means)
+NOISE_LEVEL = 0  # 10% noise applied to the product of lab values for realistic AUC
+
+# Threshold calculation method
+USE_PERCENTILE_THRESHOLD = True  # If True, use 50th percentile for 50/50 split; if False, use fixed threshold
 
 # Diagnosis timing parameters
 DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
@@ -101,7 +104,7 @@ def generate_lab_value(lab_name: str, lab_value_info: dict, noise_level: float =
     return base_value
 
 
-def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0) -> pd.DataFrame:
+def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0, use_percentile_threshold: bool = True) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
     Patient risk is determined by product of lab values with noise added to the product > threshold.
@@ -109,17 +112,47 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
 
     Args:
         pids_list: List of patient IDs
-        threshold: Threshold for product of all labs > threshold equation
+        threshold: Threshold for product of all labs > threshold equation (ignored if use_percentile_threshold=True)
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
         noise_level: Amount of noise to add to the product of lab values (multiplicative noise)
+        use_percentile_threshold: If True, calculate threshold as 50th percentile of product distribution
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
     """
     records = []
     patient_risk_map = {}
+    all_products = []  # Store all products to calculate percentile threshold
 
+    # First pass: generate all lab values and calculate products
+    for pid in pids_list:
+        # Generate exactly N CLEAN lab values for each patient (no noise on individual labs)
+        clean_lab_values = []
+        lab_concepts = []
+        
+        for i in range(1, num_labs + 1):
+            lab_concept = f"S/LAB{i}"
+            clean_lab_value = generate_lab_value(lab_concept, lab_value_info, noise_level=0.0)  # No noise on individual labs
+            if clean_lab_value is not None:
+                clean_lab_values.append(clean_lab_value)
+                lab_concepts.append(lab_concept)
+        
+        if len(clean_lab_values) == num_labs:  # Ensure we have all labs
+            # Calculate clean product of all lab values
+            clean_lab_product = np.prod(clean_lab_values)
+            all_products.append(clean_lab_product)
+
+    # Calculate threshold as 50th percentile if requested
+    if use_percentile_threshold:
+        actual_threshold = np.percentile(all_products, 50)
+        print(f"Using percentile-based threshold: {actual_threshold:.6f} (50th percentile of product distribution)")
+    else:
+        actual_threshold = threshold
+        print(f"Using provided threshold: {actual_threshold:.6f}")
+
+    # Second pass: assign risk based on calculated threshold
+    product_idx = 0
     for pid in pids_list:
         # Generate exactly N CLEAN lab values for each patient (no noise on individual labs)
         clean_lab_values = []
@@ -144,7 +177,7 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
             else:
                 noisy_lab_product = clean_lab_product
                 
-            is_high_risk = noisy_lab_product > threshold
+            is_high_risk = noisy_lab_product > actual_threshold
                             
             patient_risk_map[pid] = is_high_risk
             condition = "high_risk" if is_high_risk else "low_risk"
@@ -275,7 +308,8 @@ def generate_synthetic_data(
     diag_min_days: int = DIAG_MIN_DAYS,
     diag_max_days: int = DIAG_MAX_DAYS,
     noise_level: float = NOISE_LEVEL,
-    patient_df: pd.DataFrame = None
+    patient_df: pd.DataFrame = None,
+    use_percentile_threshold: bool = True
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
@@ -298,7 +332,7 @@ def generate_synthetic_data(
     pids_list = list(input_data["subject_id"].unique())
     
     # Generate concepts and lab values
-    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, noise_level)
+    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, noise_level, use_percentile_threshold)
 
     # Create final DataFrame - match multi_lab_addition.py structure exactly
     data = pd.DataFrame({
@@ -604,11 +638,17 @@ def main():
     print(f"Total records: {len(input_data)}")
     print(f"Total patients: {input_data['subject_id'].nunique()}")
 
+    # Use global threshold method setting
+    use_percentile = USE_PERCENTILE_THRESHOLD
+
     print(f"\nGenerating synthetic data with:")
     print(f"  - {input_data['subject_id'].nunique()} patients")
     print(f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})")
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
-    print(f"  - Multiplication threshold: (product of all {args.num_labs} labs + noise) > {args.threshold}")
+    if use_percentile:
+        print(f"  - Multiplication threshold: 50th percentile of product distribution (ensures 50/50 split)")
+    else:
+        print(f"  - Multiplication threshold: (product of all {args.num_labs} labs + noise) > {args.threshold}")
     print(f"  - Individual lab values are clean (no noise)")
     print(f"  - Multiplicative noise ({args.noise_level*100:.0f}%) is applied to the product of lab values")
     print(f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab")
@@ -643,7 +683,8 @@ def main():
         args.diag_min_days,
         args.diag_max_days,
         args.noise_level,
-        patient_df
+        patient_df,
+        use_percentile
     )
 
     print("\nGenerated data:")
@@ -686,7 +727,6 @@ def main():
 
     # Calculate theoretical performance
     performance_metrics = calculate_theoretical_performance(data, args.num_labs)
-
 
 if __name__ == "__main__":
     main()
