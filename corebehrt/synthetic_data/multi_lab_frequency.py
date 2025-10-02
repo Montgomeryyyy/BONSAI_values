@@ -22,13 +22,13 @@ from theoretical_separation import (
 # Default parameters
 N = 100000
 DEFAULT_INPUT_FILE = f"../../../data/vals/synthetic_data/{N}n/bn_labs_n{N}_50p_1unq.csv"
+PATIENTS_INFO_PATH = f"../../../data/vals/patient_infos/patient_info_{N}n.parquet"
 # Gaussian parameters for number of labs per patient
-LOW_RISK_LABS_MEAN = 5.0
+LOW_RISK_LABS_MEAN = 14.3
 LOW_RISK_LABS_STD = 2
-HIGH_RISK_LABS_MEAN = 10.0
+HIGH_RISK_LABS_MEAN = 14.7
 HIGH_RISK_LABS_STD = 2
-MIN_LABS_PER_PATIENT = 2
-MAX_LABS_PER_PATIENT = 13
+MIN_LABS_PER_PATIENT = 1
 LAB_MEAN = 0.5  # Same mean for all patients
 LAB_STD = 0.1   # Same std for all patients
 DEFAULT_WRITE_DIR = f"../../../data/vals/synthetic_data/{N}n/"
@@ -45,17 +45,24 @@ LAB_VALUE_INFO = {
             "std": LAB_STD,
         },
     },
+    "S/LAB2": {
+        "distribution": {
+            "dist": "normal",
+            "mean": LAB_MEAN,
+            "std": LAB_STD,
+        },
+    },
 }
 
 # Define concept relationships similar to multi_lab_sharp_edge.py
 CONCEPT_RELATIONSHIPS = {
     "S/LAB1": {
-        "base_probability": 1.0,  # 100% of patients get labs
+        "base_probability": 1.0,  # 100% of patients get LAB1
         "condition_probabilities": {
-            "high_risk": 0.5,  # 50% chance of being high-risk (more labs)
-            "low_risk": 0.5,  # 50% chance of being low-risk (fewer labs)
+            "high_risk": 0.5,  # 50% chance of being high-risk (more LAB1)
+            "low_risk": 0.5,  # 50% chance of being low-risk (fewer LAB1)
         },
-        "add_base_concept": ["high_risk", "low_risk"],  # Add lab for all conditions
+        "add_base_concept": ["high_risk", "low_risk"],  # Add LAB1 for all conditions
         "related_concepts": {
             "S/DIAG_POSITIVE": {
                 "prob": 1,  # 100% chance of getting diagnosis if high-risk
@@ -76,6 +83,14 @@ CONCEPT_RELATIONSHIPS = {
                 },
             }
         },
+    },
+    "S/LAB2": {
+        "base_probability": 1.0,  # 100% of patients get LAB2 (filler)
+        "condition_probabilities": {
+            "high_risk": 0.5,  # 50% chance of being high-risk
+            "low_risk": 0.5,  # 50% chance of being low-risk
+        },
+        "add_base_concept": ["high_risk", "low_risk"],  # Add LAB2 for all conditions
     },
 }
 
@@ -122,19 +137,19 @@ def generate_lab_value(lab_name: str) -> Optional[float]:
 
 
 def generate_multi_lab_concepts(pids_list: List[str], low_risk_mean: float, low_risk_std: float, 
-                               high_risk_mean: float, high_risk_std: float, min_labs: int, max_labs: int, patient_risk_map: dict) -> pd.DataFrame:
+                               high_risk_mean: float, high_risk_std: float, min_labs: int, patient_risk_map: dict) -> pd.DataFrame:
     """
     Generate multiple lab concepts and values for a list of patient IDs.
-    High-risk patients get more labs on average using Gaussian distributions.
+    High-risk patients get more LAB1 tests, low-risk patients get fewer LAB1 tests.
+    The remaining slots are filled with LAB2 tests. No maximum constraint.
 
     Args:
         pids_list: List of patient IDs
-        low_risk_mean: Mean number of labs for low-risk patients
-        low_risk_std: Standard deviation for low-risk patients
-        high_risk_mean: Mean number of labs for high-risk patients
-        high_risk_std: Standard deviation for high-risk patients
-        min_labs: Minimum number of labs per patient (applies to all patients)
-        max_labs: Maximum number of labs per patient (applies to all patients)
+        low_risk_mean: Mean number of LAB1 tests for low-risk patients
+        low_risk_std: Standard deviation for LAB1 tests for low-risk patients
+        high_risk_mean: Mean number of LAB1 tests for high-risk patients
+        high_risk_std: Standard deviation for LAB1 tests for high-risk patients
+        min_labs: Minimum number of labs per patient
         patient_risk_map: Dictionary mapping patient_id to risk status (True=high_risk, False=low_risk)
 
     Returns:
@@ -143,64 +158,75 @@ def generate_multi_lab_concepts(pids_list: List[str], low_risk_mean: float, low_
     records = []
 
     for pid in pids_list:
-        # For each base concept in CONCEPT_RELATIONSHIPS
-        for base_concept, info in CONCEPT_RELATIONSHIPS.items():
-            # Determine if this patient gets this base concept
-            if np.random.random() < info["base_probability"]:
-                # Use existing patient risk assignment
-                is_positive = patient_risk_map.get(pid, False)
-                condition = "high_risk" if is_positive else "low_risk"
+        # Use existing patient risk assignment
+        is_positive = patient_risk_map.get(pid, False)
+        condition = "high_risk" if is_positive else "low_risk"
 
-                # Add multiple lab values for this patient
-                if "add_base_concept" in info and condition in info["add_base_concept"]:
-                    if base_concept in LAB_VALUE_INFO:
-                        # Generate different number of labs based on risk status using Gaussian distributions
-                        if condition == "high_risk":
-                            n_labs = int(np.random.normal(high_risk_mean, high_risk_std))
-                        else:
-                            n_labs = int(np.random.normal(low_risk_mean, low_risk_std))
-                        
-                        # Apply min/max constraints
-                        n_labs = max(min_labs, min(max_labs, n_labs))
-                        
-                        # All patients use the same distribution
-                        for i in range(n_labs):
-                            value = generate_lab_value(base_concept)
-                            if value is not None:
-                                records.append({
-                                    "PID": pid, 
-                                    "CONCEPT": base_concept, 
-                                    "RESULT": value,
-                                    "LAB_INDEX": i,
-                                    "CONDITION": condition
-                                })
+        # Determine number of LAB1 tests based on risk status
+        if condition == "high_risk":
+            n_lab1 = int(np.random.normal(high_risk_mean, high_risk_std))
+        else:
+            n_lab1 = int(np.random.normal(low_risk_mean, low_risk_std))
+        
+        # Ensure LAB1 count is not negative
+        n_lab1 = max(0, n_lab1)
+        
+        # Determine total number of labs based on LAB1 count
+        # Total labs = LAB1 + LAB2, where LAB2 fills the remaining slots
+        # We want total labs to be at least min_labs, but can be more if needed
+        total_labs = max(min_labs, n_lab1 + 1)  # At least min_labs, at least 1 more than LAB1
+        n_lab2 = total_labs - n_lab1  # Fill remaining with LAB2
+        
+        # Generate LAB1 tests
+        for i in range(n_lab1):
+            value = generate_lab_value("S/LAB1")
+            if value is not None:
+                records.append({
+                    "PID": pid, 
+                    "CONCEPT": "S/LAB1", 
+                    "RESULT": value,
+                    "LAB_INDEX": i,
+                    "CONDITION": condition
+                })
+        
+        # Generate LAB2 tests (filler)
+        for i in range(n_lab2):
+            value = generate_lab_value("S/LAB2")
+            if value is not None:
+                records.append({
+                    "PID": pid, 
+                    "CONCEPT": "S/LAB2", 
+                    "RESULT": value,
+                    "LAB_INDEX": i,
+                    "CONDITION": condition
+                })
 
-                # Add related concepts based on their probabilities
-                for related_concept, related_info in info["related_concepts"].items():
-                    # Check if we should generate this related concept based on condition
-                    should_generate = False
-                    if "conditions" in related_info:
-                        # Only generate if the current condition is in the allowed conditions
-                        should_generate = condition in related_info["conditions"]
-                    else:
-                        # If no conditions specified, use probability
-                        should_generate = np.random.random() < related_info["prob"]
-
-                    if should_generate:
-                        # This is a diagnosis concept, add without value
-                        records.append({
-                            "PID": pid, 
-                            "CONCEPT": related_concept, 
-                            "RESULT": 1.0,
-                            "LAB_INDEX": -1,
-                            "CONDITION": condition
-                        })
+        # Add diagnosis based on risk status
+        if condition == "high_risk":
+            # High-risk patients get positive diagnosis
+            records.append({
+                "PID": pid, 
+                "CONCEPT": "S/DIAG_POSITIVE", 
+                "RESULT": 1.0,
+                "LAB_INDEX": -1,
+                "CONDITION": condition
+            })
+        else:
+            # Low-risk patients get negative diagnosis
+            records.append({
+                "PID": pid, 
+                "CONCEPT": "S/DIAG_NEGATIVE", 
+                "RESULT": 1.0,
+                "LAB_INDEX": -1,
+                "CONDITION": condition
+            })
 
     return pd.DataFrame(records)
 
 
 def generate_timestamps(
-    pids_list: List[str], concepts: List[str], lab_indices: List[int]
+    pids_list: List[str], concepts: List[str], lab_indices: List[int], 
+    patient_df: pd.DataFrame = None
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
@@ -210,6 +236,7 @@ def generate_timestamps(
         pids_list: List of patient IDs to generate timestamps for
         concepts: List of concepts corresponding to each PID
         lab_indices: List of lab indices corresponding to each record
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
 
     Returns:
         List[pd.Timestamp]: List of generated timestamps
@@ -221,13 +248,32 @@ def generate_timestamps(
         # Initialize patient's concept timestamps if not exists
         if pid not in concept_timestamps:
             concept_timestamps[pid] = {}
-            # Generate a random start time for this patient (within the last 2 years)
-            # Use seconds precision to match multi_lab_sharp_edge.py format
-            start_time = pd.Timestamp(year=2016, month=1, day=1)
-            end_time = pd.Timestamp(year=2025, month=1, day=1)
-            time_diff = (end_time - start_time).total_seconds()
-            random_seconds = np.random.randint(0, int(time_diff))
-            concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+            
+            # Get patient birth and death dates from patient_df
+            if patient_df is not None:
+                patient_info = patient_df[patient_df["subject_id"] == pid].iloc[0]
+                birthdate = pd.to_datetime(patient_info["birthdate"])
+                
+                # Handle deathdate - if NaT, use a default future date
+                deathdate = pd.to_datetime(patient_info["deathdate"])
+                if pd.isna(deathdate):
+                    deathdate = pd.Timestamp(year=2025, month=1, day=1)
+                    
+                # Ensure deathdate is after birthdate
+                if deathdate <= birthdate:
+                    deathdate = birthdate + pd.Timedelta(days=1)
+                    
+                # Generate a random start time for this patient between birth and death
+                time_diff = (deathdate - birthdate).total_seconds()
+                random_seconds = np.random.randint(0, int(time_diff))
+                concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(seconds=random_seconds)
+            else:
+                # Fallback to default time range if no patient_df provided
+                start_time = pd.Timestamp(year=2016, month=1, day=1)
+                end_time = pd.Timestamp(year=2025, month=1, day=1)
+                time_diff = (end_time - start_time).total_seconds()
+                random_seconds = np.random.randint(0, int(time_diff))
+                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
 
         # Find the base concept and its time relationship for this concept
         time_relationship = None
@@ -277,20 +323,21 @@ def generate_synthetic_data(
     high_risk_mean: float,
     high_risk_std: float,
     min_labs: int,
-    max_labs: int
+    patient_df: pd.DataFrame = None
 ) -> pd.DataFrame:
     """
     Generate synthetic data with multiple lab values per patient.
-    High-risk patients get more labs on average using Gaussian distributions.
+    High-risk patients get more LAB1 tests, low-risk patients get fewer LAB1 tests.
+    No maximum constraint on total labs.
     
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
-        low_risk_mean: Mean number of labs for low-risk patients
-        low_risk_std: Standard deviation for low-risk patients
-        high_risk_mean: Mean number of labs for high-risk patients
-        high_risk_std: Standard deviation for high-risk patients
-        min_labs: Minimum number of labs per patient (applies to all patients)
-        max_labs: Maximum number of labs per patient (applies to all patients)
+        low_risk_mean: Mean number of LAB1 tests for low-risk patients
+        low_risk_std: Standard deviation for LAB1 tests for low-risk patients
+        high_risk_mean: Mean number of LAB1 tests for high-risk patients
+        high_risk_std: Standard deviation for LAB1 tests for high-risk patients
+        min_labs: Minimum number of labs per patient
+        patient_df: DataFrame containing patient information with birthdate and deathdate columns
         
     Returns:
         pd.DataFrame: Generated synthetic data
@@ -311,7 +358,7 @@ def generate_synthetic_data(
     # Generate concepts and lab values
     concepts_data = generate_multi_lab_concepts(
         pids_list, low_risk_mean, low_risk_std, 
-        high_risk_mean, high_risk_std, min_labs, max_labs, patient_risk_map
+        high_risk_mean, high_risk_std, min_labs, patient_risk_map
     )
 
     # Create final DataFrame - match multi_lab_sharp_edge.py structure exactly
@@ -325,7 +372,8 @@ def generate_synthetic_data(
     data["time"] = generate_timestamps(
         data["subject_id"].tolist(), 
         data["code"].tolist(),
-        concepts_data["LAB_INDEX"].tolist()
+        concepts_data["LAB_INDEX"].tolist(),
+        patient_df
     )
 
     return data
@@ -338,35 +386,50 @@ def print_statistics(data: pd.DataFrame) -> None:
     Args:
         data: DataFrame containing the synthetic data
     """
-    # Get lab values for positive and negative patients
-    lab_mask = data["code"] == "S/LAB1"
-    
     # Recreate is_positive column for analysis
     positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
     data["is_positive"] = data["subject_id"].isin(positive_patients)
     positive_mask = data["is_positive"]
 
-    positive_lab_values = data[lab_mask & positive_mask]["numeric_value"]
-    negative_lab_values = data[lab_mask & ~positive_mask]["numeric_value"]
-
-    # Count labs per patient
-    positive_labs_per_patient = data[lab_mask & positive_mask].groupby("subject_id").size()
-    negative_labs_per_patient = data[lab_mask & ~positive_mask].groupby("subject_id").size()
+    # Get lab masks for both LAB1 and LAB2
+    lab1_mask = data["code"] == "S/LAB1"
+    lab2_mask = data["code"] == "S/LAB2"
+    all_labs_mask = data["code"].str.startswith("S/LAB")
 
     print("\nLab value statistics (all patients use same distribution):")
-    print(f"Overall lab values - Count: {len(data[lab_mask])}")
-    print(f"Overall lab values - Mean: {data[lab_mask]['numeric_value'].mean():.3f}")
-    print(f"Overall lab values - Std: {data[lab_mask]['numeric_value'].std():.3f}")
-    print(f"Overall lab values - Min: {data[lab_mask]['numeric_value'].min():.3f}")
-    print(f"Overall lab values - Max: {data[lab_mask]['numeric_value'].max():.3f}")
+    print(f"LAB1 - Count: {len(data[lab1_mask])}")
+    print(f"LAB1 - Mean: {data[lab1_mask]['numeric_value'].mean():.3f}")
+    print(f"LAB1 - Std: {data[lab1_mask]['numeric_value'].std():.3f}")
+    print(f"LAB1 - Min: {data[lab1_mask]['numeric_value'].min():.3f}")
+    print(f"LAB1 - Max: {data[lab1_mask]['numeric_value'].max():.3f}")
+    
+    print(f"LAB2 - Count: {len(data[lab2_mask])}")
+    print(f"LAB2 - Mean: {data[lab2_mask]['numeric_value'].mean():.3f}")
+    print(f"LAB2 - Std: {data[lab2_mask]['numeric_value'].std():.3f}")
+    print(f"LAB2 - Min: {data[lab2_mask]['numeric_value'].min():.3f}")
+    print(f"LAB2 - Max: {data[lab2_mask]['numeric_value'].max():.3f}")
 
-    print(f"\nLab frequency statistics:")
-    print(f"High-risk patients - Avg labs per patient: {positive_labs_per_patient.mean():.1f}")
-    print(f"High-risk patients - Min labs per patient: {positive_labs_per_patient.min()}")
-    print(f"High-risk patients - Max labs per patient: {positive_labs_per_patient.max()}")
-    print(f"Low-risk patients - Avg labs per patient: {negative_labs_per_patient.mean():.1f}")
-    print(f"Low-risk patients - Min labs per patient: {negative_labs_per_patient.min()}")
-    print(f"Low-risk patients - Max labs per patient: {negative_labs_per_patient.max()}")
+    # Count labs per patient
+    positive_lab1_per_patient = data[lab1_mask & positive_mask].groupby("subject_id").size()
+    negative_lab1_per_patient = data[lab1_mask & ~positive_mask].groupby("subject_id").size()
+    positive_total_per_patient = data[all_labs_mask & positive_mask].groupby("subject_id").size()
+    negative_total_per_patient = data[all_labs_mask & ~positive_mask].groupby("subject_id").size()
+
+    print(f"\nLAB1 frequency statistics (determines risk):")
+    print(f"High-risk patients - Avg LAB1 per patient: {positive_lab1_per_patient.mean():.1f}")
+    print(f"High-risk patients - Min LAB1 per patient: {positive_lab1_per_patient.min()}")
+    print(f"High-risk patients - Max LAB1 per patient: {positive_lab1_per_patient.max()}")
+    print(f"Low-risk patients - Avg LAB1 per patient: {negative_lab1_per_patient.mean():.1f}")
+    print(f"Low-risk patients - Min LAB1 per patient: {negative_lab1_per_patient.min()}")
+    print(f"Low-risk patients - Max LAB1 per patient: {negative_lab1_per_patient.max()}")
+    
+    print(f"\nTotal lab frequency statistics (LAB1 + LAB2):")
+    print(f"High-risk patients - Avg total labs per patient: {positive_total_per_patient.mean():.1f}")
+    print(f"High-risk patients - Min total labs per patient: {positive_total_per_patient.min()}")
+    print(f"High-risk patients - Max total labs per patient: {positive_total_per_patient.max()}")
+    print(f"Low-risk patients - Avg total labs per patient: {negative_total_per_patient.mean():.1f}")
+    print(f"Low-risk patients - Min total labs per patient: {negative_total_per_patient.min()}")
+    print(f"Low-risk patients - Max total labs per patient: {negative_total_per_patient.max()}")
 
 
 def create_distribution_plot(
@@ -425,29 +488,34 @@ def create_distribution_plot(
 
 
 
-def calculate_theoretical_performance(data: pd.DataFrame) -> dict:
+def calculate_theoretical_performance(data: pd.DataFrame, low_risk_mean: float, low_risk_std: float, 
+                                     high_risk_mean: float, high_risk_std: float) -> dict:
     """
     Calculate the theoretical performance of the model based on frequency differences.
 
     Args:
         data: DataFrame containing the synthetic data
+        low_risk_mean: Mean LAB1 frequency for low-risk patients
+        low_risk_std: Standard deviation for LAB1 frequency for low-risk patients
+        high_risk_mean: Mean LAB1 frequency for high-risk patients
+        high_risk_std: Standard deviation for LAB1 frequency for high-risk patients
         
     Returns:
         dict: Dictionary containing performance metrics
     """
-    # Calculate frequency-based AUC
-    frequency_auc = calculate_frequency_auc(data)
+    # Calculate theoretical frequency-based AUC
+    frequency_auc = calculate_frequency_auc(data, low_risk_mean, low_risk_std, high_risk_mean, high_risk_std)
     
-    # Calculate other metrics
+    # Calculate other metrics (these may still have some leakage but are less critical)
     sweep_auc = sweep_threshold_auc(data)
     scipy_mann_whitney_u_auc = scipy_mann_whitney_u(data)
     cohens_d_metric = cohens_d(data)
     
     print("\nTheoretical performance:")
-    print(f"Frequency-based AUC: {frequency_auc}")
-    print(f"Sweep AUC: {sweep_auc}")
-    print(f"Scipy Mann-Whitney U: {scipy_mann_whitney_u_auc}")
-    print(f"Cohen's d: {cohens_d_metric}")
+    print(f"Theoretical frequency-based AUC (based on distribution separation): {frequency_auc:.4f}")
+    print(f"Sweep AUC (LAB1 values only): {sweep_auc:.4f}")
+    print(f"Scipy Mann-Whitney U (LAB1 values only): {scipy_mann_whitney_u_auc:.4f}")
+    print(f"Cohen's d (LAB1 values only): {cohens_d_metric:.4f}")
     
     return {
         "frequency_auc": frequency_auc,
@@ -457,34 +525,81 @@ def calculate_theoretical_performance(data: pd.DataFrame) -> dict:
     }
 
 
-def calculate_frequency_auc(data: pd.DataFrame) -> float:
+def calculate_frequency_auc(data: pd.DataFrame, low_risk_mean: float, low_risk_std: float, 
+                          high_risk_mean: float, high_risk_std: float) -> float:
     """
-    Calculate AUC for detecting high-risk patients based on lab frequency.
+    Calculate theoretical AUC for detecting high-risk patients based on LAB1 frequency distributions.
+    
+    This function:
+    1. Calculates theoretical AUC based on design parameters
+    2. Validates the actual generated data against design parameters
+    3. Reports both to identify any mismatches
     
     Args:
         data: DataFrame containing the synthetic data
+        low_risk_mean: Mean LAB1 frequency for low-risk patients (design parameter)
+        low_risk_std: Standard deviation for LAB1 frequency for low-risk patients (design parameter)
+        high_risk_mean: Mean LAB1 frequency for high-risk patients (design parameter)
+        high_risk_std: Standard deviation for LAB1 frequency for high-risk patients (design parameter)
         
     Returns:
-        float: AUC for frequency-based detection
+        float: Theoretical AUC for LAB1 frequency-based detection
     """
-    lab_data = data[data['code'] == 'S/LAB1']
+    from scipy.stats import norm
     
-    # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients)
+    # Get LAB1 frequency data from the actual generated data
+    lab1_data = data[data['code'] == 'S/LAB1']
     
-    # Count labs per patient
-    labs_per_patient = lab_data.groupby("subject_id").size()
-    patient_risks = lab_data.groupby("subject_id")["is_positive"].first()
+    if len(lab1_data) == 0:
+        print("Warning: No LAB1 data found in the dataset")
+        return 0.5
     
-    from sklearn.metrics import roc_auc_score
-    auc = roc_auc_score(patient_risks, labs_per_patient)
-    return auc
+    # Count LAB1 tests per patient
+    lab1_per_patient = lab1_data.groupby("subject_id").size()
+    
+    if len(lab1_per_patient) < 2:
+        print("Warning: Not enough patients with LAB1 data")
+        return 0.5
+    
+    # Calculate observed statistics for validation
+    observed_mean = lab1_per_patient.mean()
+    observed_std = lab1_per_patient.std()
+    
+    print(f"Observed LAB1 frequency - Mean: {observed_mean:.2f}, Std: {observed_std:.2f}")
+    print(f"Expected - Low-risk: {low_risk_mean:.2f}±{low_risk_std:.2f}, High-risk: {high_risk_mean:.2f}±{high_risk_std:.2f}")
+    
+    # Calculate theoretical AUC based on the DESIGN parameters
+    mean_diff = high_risk_mean - low_risk_mean
+    combined_std = np.sqrt(low_risk_std**2 + high_risk_std**2)
+    
+    if combined_std == 0:
+        theoretical_auc = 1.0 if mean_diff > 0 else 0.0
+    else:
+        z_score = mean_diff / combined_std
+        theoretical_auc = norm.cdf(z_score)
+    
+    print(f"Theoretical AUC (based on design parameters): {theoretical_auc:.4f}")
+    
+    # Now validate the actual generated data
+    # Check if the observed data matches the design parameters
+    if abs(observed_mean - (low_risk_mean + high_risk_mean) / 2) > 0.5:
+        print(f"WARNING: Observed mean ({observed_mean:.2f}) doesn't match expected mean ({(low_risk_mean + high_risk_mean) / 2:.2f})")
+    
+    if abs(observed_std - (low_risk_std + high_risk_std) / 2) > 0.5:
+        print(f"WARNING: Observed std ({observed_std:.2f}) doesn't match expected std ({(low_risk_std + high_risk_std) / 2:.2f})")
+    
+    # If design parameters are identical (no separation), the theoretical AUC should be 0.5
+    if abs(mean_diff) < 0.01:
+        print("INFO: Design parameters are identical - no theoretical separation expected")
+        if theoretical_auc != 0.5:
+            print(f"WARNING: Theoretical AUC should be 0.5 for identical parameters, but got {theoretical_auc:.4f}")
+    
+    return theoretical_auc
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate synthetic data with multiple lab values where all patients have the same distribution but positive patients have more labs on average"
+        description="Generate synthetic data where all patients have the same total number of labs, but high-risk patients get more LAB1 tests (filler with LAB2)"
     )
     parser.add_argument(
         "--input_file",
@@ -523,16 +638,16 @@ def main():
         help="Minimum number of lab values per patient (applies to all patients)",
     )
     parser.add_argument(
-        "--max_labs",
-        type=int,
-        default=MAX_LABS_PER_PATIENT,
-        help="Maximum number of lab values per patient (applies to all patients)",
-    )
-    parser.add_argument(
         "--write_dir",
         type=str,
         default=DEFAULT_WRITE_DIR,
         help="Directory to write output files",
+    )
+    parser.add_argument(
+        "--patient_info_path",
+        type=str,
+        default=PATIENTS_INFO_PATH,
+        help="Path to patient information parquet file (optional, for realistic birth/death dates)",
     )
 
     args = parser.parse_args()
@@ -543,6 +658,16 @@ def main():
     except FileNotFoundError:
         print(f"Error: Could not find input file at {args.input_file}")
         return
+
+    # Read patient info data if provided
+    patient_df = None
+    if args.patient_info_path:
+        try:
+            patient_df = pd.read_parquet(args.patient_info_path)
+            print(f"Loaded patient info from {args.patient_info_path}")
+        except FileNotFoundError:
+            print(f"Warning: Could not find patient info file at {args.patient_info_path}")
+            print("Using default timestamp generation")
 
     print("Initial data:")
     print(input_data.head())
@@ -564,12 +689,13 @@ def main():
 
     print(f"\nGenerating synthetic data with:")
     print(f"  - {input_data['subject_id'].nunique()} patients")
-    print(f"  - Low-risk patients: ~{args.low_risk_mean:.1f} ± {args.low_risk_std:.1f} lab values per patient")
-    print(f"  - High-risk patients: ~{args.high_risk_mean:.1f} ± {args.high_risk_std:.1f} lab values per patient")
-    print(f"  - All patients constrained to {args.min_labs}-{args.max_labs} lab values")
+    print(f"  - All patients get at least {args.min_labs} labs (no maximum constraint)")
+    print(f"  - Low-risk patients: ~{args.low_risk_mean:.1f} ± {args.low_risk_std:.1f} LAB1 tests per patient")
+    print(f"  - High-risk patients: ~{args.high_risk_mean:.1f} ± {args.high_risk_std:.1f} LAB1 tests per patient")
+    print(f"  - Remaining slots filled with LAB2 (filler)")
     print(f"  - All patients use the same lab value distribution (mean={LAB_MEAN}, std={LAB_STD})")
-    print(f"  - {positive_patients} high-risk patients (more labs)")
-    print(f"  - {negative_patients} low-risk patients (fewer labs)")
+    print(f"  - {positive_patients} high-risk patients (more LAB1)")
+    print(f"  - {negative_patients} low-risk patients (fewer LAB1)")
 
     # Generate synthetic data
     data = generate_synthetic_data(
@@ -579,7 +705,7 @@ def main():
         args.high_risk_mean,
         args.high_risk_std,
         args.min_labs,
-        args.max_labs
+        patient_df
     )
 
     print("\nGenerated data:")
@@ -594,24 +720,40 @@ def main():
     data.to_csv(write_dir / f"{SAVE_NAME}.csv", index=False)
     print(f"\nSaved synthetic data to {write_dir / f'{SAVE_NAME}.csv'}")
 
-    # Min-max normalize numeric_value for S/LAB1 and save as a separate file
+    # Min-max normalize numeric_value for both S/LAB1 and S/LAB2 separately and save as a separate file
     normalized_data = data.copy()
-    lab_mask = normalized_data["code"] == "S/LAB1"
-    if lab_mask.any():
-        min_val = normalized_data.loc[lab_mask, "numeric_value"].min()
-        max_val = normalized_data.loc[lab_mask, "numeric_value"].max()
+    
+    # Normalize LAB1 separately
+    lab1_mask = normalized_data["code"] == "S/LAB1"
+    if lab1_mask.any():
+        min_val = normalized_data.loc[lab1_mask, "numeric_value"].min()
+        max_val = normalized_data.loc[lab1_mask, "numeric_value"].max()
         if max_val > min_val:
-            normalized_data.loc[lab_mask, "numeric_value"] = (
-                normalized_data.loc[lab_mask, "numeric_value"] - min_val
+            normalized_data.loc[lab1_mask, "numeric_value"] = (
+                normalized_data.loc[lab1_mask, "numeric_value"] - min_val
             ) / (max_val - min_val)
         else:
-            normalized_data.loc[lab_mask, "numeric_value"] = 0.0
+            normalized_data.loc[lab1_mask, "numeric_value"] = 0.0
+    
+    # Normalize LAB2 separately
+    lab2_mask = normalized_data["code"] == "S/LAB2"
+    if lab2_mask.any():
+        min_val = normalized_data.loc[lab2_mask, "numeric_value"].min()
+        max_val = normalized_data.loc[lab2_mask, "numeric_value"].max()
+        if max_val > min_val:
+            normalized_data.loc[lab2_mask, "numeric_value"] = (
+                normalized_data.loc[lab2_mask, "numeric_value"] - min_val
+            ) / (max_val - min_val)
+        else:
+            normalized_data.loc[lab2_mask, "numeric_value"] = 0.0
     
     normalized_filename = write_dir / f"{SAVE_NAME}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(data)
+    performance_metrics = calculate_theoretical_performance(
+        data, args.low_risk_mean, args.low_risk_std, args.high_risk_mean, args.high_risk_std
+    )
 
     # Create plots
     plot_dir = Path(DEFAULT_PLOT_DIR)

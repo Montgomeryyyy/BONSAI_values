@@ -29,7 +29,7 @@ LAB_STD = 0.1   # Std for all labs
 NUM_LABS = 2  # Default to 2 labs, can be changed via command line
 NOISE_LEVEL = 0.0  # Multiplicative noise applied to the polynomial result
 POSITIVE_RATE = 0.5  # Default to 50% positive, 50% negative
-POLYNOMIAL_DEGREE = 2  # Default to quadratic (includes interactions)
+POLYNOMIAL_DEGREE = 4  # Default to quadratic (includes interactions)
 
 # Diagnosis timing parameters
 DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
@@ -60,25 +60,45 @@ def generate_polynomial_coefficients(num_labs: int, degree: int, seed: int = Non
     # Constant term
     coefficients['c0'] = np.random.uniform(-1, 1)
     
-    # Linear terms
-    for i in range(1, num_labs + 1):
-        coefficients[f'c{i}'] = np.random.uniform(-1, 1)
-    
-    # Higher order terms (interactions)
-    if degree >= 2:
-        # Quadratic terms (LABi * LABj for i <= j)
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                coefficients[f'c{i}{j}'] = np.random.uniform(-1, 1)
-    
-    if degree >= 3:
-        # Cubic terms (LABi * LABj * LABk for i <= j <= k)
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                for k in range(j, num_labs + 1):
-                    coefficients[f'c{i}{j}{k}'] = np.random.uniform(-1, 1)
+    # Generate all possible combinations for each degree
+    for d in range(1, degree + 1):
+        # Generate all combinations of d lab variables (with repetition allowed, but ordered)
+        for combo in generate_combinations(num_labs, d):
+            coef_name = 'c' + ''.join(map(str, combo))
+            coefficients[coef_name] = np.random.uniform(-1, 1)
     
     return coefficients
+
+
+def generate_combinations(num_labs: int, degree: int) -> List[List[int]]:
+    """
+    Generate all combinations of lab indices for a given degree.
+    Returns combinations where indices are non-decreasing (i <= j <= k <= ...).
+    
+    Args:
+        num_labs: Number of lab variables
+        degree: Degree of the polynomial term
+        
+    Returns:
+        List of lists, where each inner list contains lab indices
+    """
+    if degree == 0:
+        return [[]]
+    
+    combinations = []
+    
+    def _generate_combinations(current_combo, start_idx):
+        if len(current_combo) == degree:
+            combinations.append(current_combo[:])
+            return
+        
+        for i in range(start_idx, num_labs + 1):
+            current_combo.append(i)
+            _generate_combinations(current_combo, i)  # Allow repetition by starting from i
+            current_combo.pop()
+    
+    _generate_combinations([], 1)
+    return combinations
 
 
 def evaluate_polynomial(lab_values: List[float], coefficients: Dict[str, float], num_labs: int, degree: int) -> float:
@@ -99,26 +119,20 @@ def evaluate_polynomial(lab_values: List[float], coefficients: Dict[str, float],
     # Constant term
     result += coefficients.get('c0', 0.0)
     
-    # Linear terms
-    for i in range(1, num_labs + 1):
-        if i <= len(lab_values):
-            result += coefficients.get(f'c{i}', 0.0) * lab_values[i-1]
-    
-    # Higher order terms
-    if degree >= 2:
-        # Quadratic terms (interactions)
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                if i <= len(lab_values) and j <= len(lab_values):
-                    result += coefficients.get(f'c{i}{j}', 0.0) * lab_values[i-1] * lab_values[j-1]
-    
-    if degree >= 3:
-        # Cubic terms
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                for k in range(j, num_labs + 1):
-                    if i <= len(lab_values) and j <= len(lab_values) and k <= len(lab_values):
-                        result += coefficients.get(f'c{i}{j}{k}', 0.0) * lab_values[i-1] * lab_values[j-1] * lab_values[k-1]
+    # Evaluate all polynomial terms
+    for d in range(1, degree + 1):
+        for combo in generate_combinations(num_labs, d):
+            # Check if all indices are within bounds
+            if all(idx <= len(lab_values) for idx in combo):
+                coef_name = 'c' + ''.join(map(str, combo))
+                coef_value = coefficients.get(coef_name, 0.0)
+                
+                # Calculate the product of lab values for this combination
+                term_value = 1.0
+                for idx in combo:
+                    term_value *= lab_values[idx - 1]  # Convert to 0-based indexing
+                
+                result += coef_value * term_value
     
     return result
 
@@ -191,45 +205,58 @@ def print_polynomial_equation(coefficients: Dict[str, float], num_labs: int, deg
     if 'c0' in coefficients and abs(coefficients['c0']) > 1e-6:
         terms.append(f"{coefficients['c0']:.3f}")
     
-    # Linear terms
-    for i in range(1, num_labs + 1):
-        coef_name = f'c{i}'
-        if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
-            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}")
-    
-    # Higher order terms
-    if degree >= 2:
-        # Quadratic terms (interactions)
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                coef_name = f'c{i}{j}'
-                if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
-                    if i == j:
-                        terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}²")
-                    else:
-                        terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}")
-    
-    if degree >= 3:
-        # Cubic terms
-        for i in range(1, num_labs + 1):
-            for j in range(i, num_labs + 1):
-                for k in range(j, num_labs + 1):
-                    coef_name = f'c{i}{j}{k}'
-                    if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
-                        if i == j == k:
-                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}³")
-                        elif i == j:
-                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}²*LAB{k}")
-                        elif j == k:
-                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}²")
-                        else:
-                            terms.append(f"{coefficients[coef_name]:.3f}*LAB{i}*LAB{j}*LAB{k}")
+    # All polynomial terms
+    for d in range(1, degree + 1):
+        for combo in generate_combinations(num_labs, d):
+            coef_name = 'c' + ''.join(map(str, combo))
+            if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
+                # Format the term
+                term_str = format_polynomial_term(coefficients[coef_name], combo)
+                terms.append(term_str)
     
     if not terms:
         print("0")
     else:
         print(" + ".join(terms).replace("+ -", "- "))
     print()
+
+
+def format_polynomial_term(coef_value: float, combo: List[int]) -> str:
+    """
+    Format a polynomial term for display.
+    
+    Args:
+        coef_value: Coefficient value
+        combo: List of lab indices (e.g., [1, 1, 2] for LAB1²*LAB2)
+        
+    Returns:
+        Formatted string for the term
+    """
+    # Count occurrences of each lab index
+    lab_counts = {}
+    for idx in combo:
+        lab_counts[idx] = lab_counts.get(idx, 0) + 1
+    
+    # Build the term string
+    coef_str = f"{coef_value:.3f}"
+    
+    # Add lab variables with their powers
+    lab_parts = []
+    for lab_idx in sorted(lab_counts.keys()):
+        count = lab_counts[lab_idx]
+        if count == 1:
+            lab_parts.append(f"LAB{lab_idx}")
+        elif count == 2:
+            lab_parts.append(f"LAB{lab_idx}²")
+        elif count == 3:
+            lab_parts.append(f"LAB{lab_idx}³")
+        else:
+            lab_parts.append(f"LAB{lab_idx}^{count}")
+    
+    if lab_parts:
+        return f"{coef_str}*{'*'.join(lab_parts)}"
+    else:
+        return coef_str
 
 
 def find_optimal_threshold(pids_list: List[str], num_labs: int, 
