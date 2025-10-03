@@ -103,8 +103,28 @@ class ValueCreatorDiscrete:
         return concepts
 
     @staticmethod
-    def add_values(concepts: pd.DataFrame) -> pd.DataFrame:
+    def add_values(concepts: pd.DataFrame, bin_values: bool = False, bin_mapping: dict = None, num_bins: int = 10) -> pd.DataFrame:
         concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
+
+        # Bin values if bin_values is True
+        if bin_values:
+            print("Binning values")
+            if bin_mapping is not None:
+                concepts[VALUE_COL] = concepts.groupby(CONCEPT_COL).apply(
+                    lambda group: ValueCreator.bin(
+                        group[VALUE_COL], 
+                        num_bins=bin_mapping.get(group[CONCEPT_COL].iloc[0], num_bins)
+                    ) if group[VALUE_COL].notna().any() 
+                    else pd.Series([None] * len(group), index=group.index)
+                ).reset_index(level=0, drop=True)
+            else:
+                concepts[VALUE_COL] = ValueCreator.bin(
+                    concepts[VALUE_COL], num_bins=num_bins
+            )
+        else:
+            print("No binning applied")
+
+        # Add index and order
         concepts["index"] = concepts.index
         concepts.loc[:, "order"] = 0
         

@@ -12,6 +12,7 @@ from corebehrt.constants.data import (
     CONCEPT_COL,
     TIMESTAMP_COL,
     SEGMENT_COL,
+    VALUE_COL,
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -59,6 +60,15 @@ def load_tokenize_and_save(
         pids.extend(df[PID_COL].unique().tolist())
     torch.save(set(pids), join(tokenized_path, f"pids_{split}.pt"))  # save pids as ints
 
+def make_bin_mapping(bin_mapping_func, features_path):
+    """
+    Makes a bin mapping from a function.
+    """
+
+    values_counts = get_unique_value_counts(features_path, splits=["train", "tuning"])    
+    mapping_func = instantiate_function(bin_mapping_func)
+    bin_mapping = {concept: mapping_func(values_counts[concept]) for concept in values_counts}
+    return bin_mapping
 
 def make_bin_mapping(bin_mapping_func, features_path):
     """
@@ -83,16 +93,11 @@ def create_and_save_features(cfg, splits, logger) -> None:
         f"Initialized combined_patient_info as DataFrame with shape: {combined_patient_info.shape}"
     )
 
-    # Extract bin mapping configuration
-    bin_mapping_func = (
-        cfg.get("features", {})
-        .get("values", {})
-        .get("value_creator_kwargs", {})
-        .get("bin_mapping_func")
-    )
-    bin_mapping = (
-        make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
-    )
+    if "bin_mapping_func" in cfg.features.values.value_creator_kwargs:
+        bin_mapping = make_bin_mapping(cfg.features.values.value_creator_kwargs["bin_mapping_func"], cfg.paths.data)
+    else:
+        bin_mapping = None
+
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -289,7 +294,7 @@ def handle_numeric_values(
         concepts: DataFrame containing concepts data
         features_cfg: Configuration object containing features settings
     """
-    if "numeric_value" not in concepts.columns:
+    if VALUE_COL not in concepts.columns:
         return concepts
 
     if features_cfg and "values" in features_cfg:
@@ -320,6 +325,9 @@ def handle_numeric_values(
             raise ValueError(f"Unsupported value type: {value_type}")
         return ValueCreator.add_values(
             concepts,
+            bin_values=bin_values,
+            num_bins=num_bins,
+            bin_mapping=bin_mapping,
         )
         # null_token = getattr(features_cfg.values, "null_token", VALUE_NULL_TOKEN)
         # return ValueCreator.add_null_token(concepts, null_token)
@@ -338,7 +346,7 @@ def handle_numeric_values(
         #     separator_regex=separator_regex,
         # )
 
-    return concepts.drop(columns=["numeric_value"])
+    return concepts.drop(columns=[VALUE_COL])
 
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
