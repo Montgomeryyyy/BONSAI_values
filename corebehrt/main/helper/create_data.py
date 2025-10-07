@@ -70,10 +70,9 @@ def create_and_save_features(cfg, splits, logger) -> None:
         f"Initialized combined_patient_info as DataFrame with shape: {combined_patient_info.shape}"
     )
 
-    if "bin_mapping_func" in cfg.features.values.value_creator_kwargs:
-        bin_mapping = make_bin_mapping(cfg.features.values.value_creator_kwargs["bin_mapping_func"], cfg.paths.data)
-    else:
-        bin_mapping = None
+    # Extract bin mapping configuration
+    bin_mapping_func = cfg.get("features", {}).get("values", {}).get("value_creator_kwargs", {}).get("bin_mapping_func")
+    bin_mapping = make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
