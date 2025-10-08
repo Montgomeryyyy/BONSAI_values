@@ -153,8 +153,13 @@ def create_background(concepts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     dob_rows = concepts[concepts[CONCEPT_COL] == BIRTH_CODE]
     birthdates = dict(zip(dob_rows[PID_COL], dob_rows[TIMESTAMP_COL]))
     concepts[BIRTHDATE_COL] = concepts[PID_COL].map(birthdates)
-    if concepts[BIRTHDATE_COL].isna().any():
-        raise ValueError("Some patients have no DOB")
+    
+    # Exclude patients without birthdate instead of raising an error
+    patients_with_dob = concepts[BIRTHDATE_COL].notna()
+    if not patients_with_dob.all():
+        excluded_patients = concepts[~patients_with_dob][PID_COL].unique()
+        print(f"Warning: Excluding {len(excluded_patients)} patients without birthdate: {excluded_patients}")
+        concepts = concepts[patients_with_dob].copy()
 
     # Use boolean masking instead of index-based selection for background rows
     bg_mask = concepts[TIMESTAMP_COL].isna()
