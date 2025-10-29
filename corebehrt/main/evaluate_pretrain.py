@@ -43,7 +43,13 @@ def main_evaluate_pretrain(config_path):
         CorebehrtForPretraining
     )
     model.to(device)
+    
+    
     print(f"Model loaded from {cfg.paths.model}")
+    print(f"Using device: {device}")
+    if device.type == "cuda":
+        print(f"GPU memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+        print(f"GPU memory cached: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
 
     # Load test data
     test_data = PatientDataset(

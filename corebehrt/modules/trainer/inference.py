@@ -77,14 +77,28 @@ class EHRInferenceRunnerPretrain(EHRTrainer):
             else "Running inference"
         )
 
+        # Collect all embeddings on GPU first, then move to CPU once at the end
         model_embs = []
 
         with torch.no_grad():
-            for batch in loop:
+            for batch_idx, batch in enumerate(loop):
+                print(f"Batch {batch_idx} of {len(loop)}")
                 self.batch_to_device(batch)
                 with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
                     outputs = self.model(batch)
 
-                model_embs.append(outputs.last_hidden_state.cpu())
+                # Keep on GPU to avoid repeated CPU transfers
+                model_embs.append(outputs.last_hidden_state)
+                
+                # Optional: Clear GPU cache periodically to prevent OOM
+                if batch_idx % 10 == 0 and self.device.type == "cuda":
+                    torch.cuda.empty_cache()
 
-        return torch.cat(model_embs, dim=0).squeeze()
+        # Concatenate on GPU first, then move to CPU once
+        concatenated_embs = torch.cat(model_embs, dim=0)
+        
+        # Clear GPU memory before final CPU transfer
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+            
+        return concatenated_embs.cpu().squeeze()
