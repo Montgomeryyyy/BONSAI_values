@@ -28,3 +28,4 @@ data:
     month: 1
     day: 1
   split_data: true
+  mode: "train"

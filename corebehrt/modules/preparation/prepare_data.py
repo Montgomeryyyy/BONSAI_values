@@ -174,7 +174,7 @@ class DatasetPreparer:
 
         return data
 
-    def prepare_pretrain_data(self, save_data=False) -> Tuple[PatientDataset, dict]:
+    def prepare_pretrain_data(self, save_data=False, mode="train") -> Tuple[PatientDataset, dict]:
         data_cfg = self.cfg.data
         paths_cfg = self.cfg.paths
 
@@ -182,7 +182,7 @@ class DatasetPreparer:
         # Load tokenized data + vocab
         loader = ShardLoader(
             data_dir=paths_cfg.tokenized,
-            splits=["features_train"],
+            splits=[f"features_{mode}"],
             patient_info_path=None,
         )
         patient_list = []
