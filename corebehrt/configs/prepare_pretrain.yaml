@@ -27,3 +27,4 @@ data:
     year: 2020
     month: 1
     day: 1
+  split_data: true

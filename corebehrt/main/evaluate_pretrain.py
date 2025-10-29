@@ -43,7 +43,7 @@ def main_evaluate_pretrain(config_path):
         CorebehrtForPretraining
     )
     model.to(device)
-    print("Model loaded from {cfg.paths.model}")
+    print(f"Model loaded from {cfg.paths.model}")
 
     # Load test data
     test_data = PatientDataset(
