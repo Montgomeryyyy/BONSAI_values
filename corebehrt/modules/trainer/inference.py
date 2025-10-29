@@ -79,10 +79,10 @@ class EHRInferenceRunnerPretrain(EHRTrainer):
 
         # Collect all embeddings on GPU first, then move to CPU once at the end
         model_embs = []
+        batch_pids = []  # Store PIDs for each batch
 
         with torch.no_grad():
             for batch_idx, batch in enumerate(loop):
-                print(f"Batch {batch_idx} of {len(loop)}")
                 self.batch_to_device(batch)
                 with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
                     outputs = self.model(batch)
@@ -90,15 +90,48 @@ class EHRInferenceRunnerPretrain(EHRTrainer):
                 # Keep on GPU to avoid repeated CPU transfers
                 model_embs.append(outputs.last_hidden_state)
                 
+                # Extract PIDs for this batch
+                if hasattr(self.test_dataset, 'patients'):
+                    # Get the indices for this batch
+                    start_idx = batch_idx * self.args.get("test_batch_size", 128)
+                    end_idx = min(start_idx + self.args.get("test_batch_size", 128), len(self.test_dataset))
+                    batch_indices = list(range(start_idx, end_idx))
+                    
+                    # Get PIDs for these indices
+                    pids = [self.test_dataset.patients[i].pid for i in batch_indices]
+                    batch_pids.append(pids)
+                else:
+                    # Fallback: use batch indices as PIDs
+                    batch_size = outputs.last_hidden_state.shape[0]
+                    pids = [f"batch_{batch_idx}_sample_{i}" for i in range(batch_size)]
+                    batch_pids.append(pids)
+                
                 # Optional: Clear GPU cache periodically to prevent OOM
                 if batch_idx % 10 == 0 and self.device.type == "cuda":
                     torch.cuda.empty_cache()
 
-        # Concatenate on GPU first, then move to CPU once
-        concatenated_embs = torch.cat(model_embs, dim=0)
+        # Flatten embeddings and PIDs into single lists
+        # Each element in the lists corresponds to one sample:
+        # - embeddings: shape (sequence_length, hidden_size) - variable sequence length
+        # - pids: string - patient ID
         
-        # Clear GPU memory before final CPU transfer
+        # Flatten embeddings and PIDs
+        all_embeddings = []
+        all_pids = []
+        
+        for i, (emb, pids) in enumerate(zip(model_embs, batch_pids)):
+            # Move to CPU and split by sample
+            emb_cpu = emb.cpu()
+            for j in range(emb_cpu.shape[0]):  # For each sample in the batch
+                all_embeddings.append(emb_cpu[j])  # Shape: (sequence_length, hidden_size)
+                all_pids.append(pids[j])  # String: patient ID
+            
+            # Clear GPU cache periodically
+            if i % 10 == 0 and self.device.type == "cuda":
+                torch.cuda.empty_cache()
+        
+        # Clear GPU memory
         if self.device.type == "cuda":
             torch.cuda.empty_cache()
             
-        return concatenated_embs.cpu().squeeze()
+        return all_embeddings, all_pids
