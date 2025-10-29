@@ -15,6 +15,7 @@ from corebehrt.constants.paths import (
     PREPARE_FINETUNE_CFG,
     EVALUATE_CFG,
     XGBOOST_CFG,
+    EVALUATE_PRETRAIN_CFG
 )
 from corebehrt.functional.setup.checks import check_categories
 from corebehrt.modules.setup.config import Config, load_config
@@ -447,7 +448,7 @@ class DirectoryPreparer:
 
     def setup_evaluate(self, finetune_cfg=None) -> None:
         """
-        Validates path config and sets up directories for finetune.
+        Validates path config and sets up directories for evaluate.
         """
         # Setup logging
         self.setup_logging("evaluate")
@@ -463,6 +464,17 @@ class DirectoryPreparer:
         else:
             self.write_config("predictions", source="model", name=FINETUNE_CFG)
 
+    def setup_evaluate_pretrain(self) -> None:
+        """
+        Validates path config and sets up directories for evaluate pretrain.
+        """
+        # Setup logging
+        self.setup_logging("evaluate pretrain")
+
+        # Validate and create directories
+        self.check_directory("test_data_dir")
+        self.create_directory("embeddings", clear=True)
+        self.write_config("embeddings", name=EVALUATE_PRETRAIN_CFG)
     #
     # Directory naming generators
     #

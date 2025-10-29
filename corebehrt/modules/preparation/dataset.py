@@ -156,13 +156,16 @@ class MLMDataset(Dataset):
     ):
         self.patients = patients
         self.vocabulary = vocabulary
-        self.masker = ConceptMasker(
-            vocabulary,
-            select_ratio,
-            masking_ratio,
-            replace_ratio,
-            ignore_special_tokens,
-        )
+        if select_ratio > 0:
+            self.masker = ConceptMasker(
+                vocabulary,
+                select_ratio,
+                masking_ratio,
+                replace_ratio,
+                ignore_special_tokens,
+            )
+        else:
+            self.masker = None
 
     def __getitem__(self, index: int) -> dict:
         """
@@ -173,7 +176,11 @@ class MLMDataset(Dataset):
         """
         patient = self.patients[index]
         concepts = torch.tensor(patient.concepts, dtype=torch.long)
-        masked_concepts, target = self.masker.mask_patient_concepts(concepts)
+        if self.masker is not None:
+            masked_concepts, target = self.masker.mask_patient_concepts(concepts)
+        else:
+            masked_concepts = concepts
+            target = torch.zeros(concepts.shape[0], dtype=torch.long)
         attention_mask = torch.ones_like(masked_concepts)
         sample = {
             CONCEPT_FEAT: masked_concepts,

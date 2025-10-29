@@ -61,3 +61,30 @@ class EHRInferenceRunner(EHRTrainer):
             return_embedding=True,
         )
         return head_embedding
+
+
+class EHRInferenceRunnerPretrain(EHRTrainer):
+    def inference_loop(self, return_embeddings=False) -> tuple:
+        if self.test_dataset is None:
+            raise ValueError("No test dataset provided")
+
+        dataloader = self.get_dataloader(self.test_dataset, mode="test")
+        self.model.eval()
+        loop = get_tqdm(dataloader)
+        loop.set_description(
+            "Running inference with embeddings"
+            if return_embeddings
+            else "Running inference"
+        )
+
+        model_embs = []
+
+        with torch.no_grad():
+            for batch in loop:
+                self.batch_to_device(batch)
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16):
+                    outputs = self.model(batch)
+
+                model_embs.append(outputs.last_hidden_state.cpu())
+
+        return torch.cat(model_embs, dim=0).squeeze()
