@@ -115,9 +115,15 @@ class EHRInferenceRunnerPretrain(EHRTrainer):
         # - embeddings: shape (sequence_length, hidden_size) - variable sequence length
         # - pids: string - patient ID
         
+        if not model_embs or not batch_pids:
+            print("Warning: No embeddings or PIDs collected during inference")
+            return [], []
+        
         # Flatten embeddings and PIDs
         all_embeddings = []
         all_pids = []
+        
+        print(f"Processing {len(model_embs)} batches for flattening...")
         
         for i, (emb, pids) in enumerate(zip(model_embs, batch_pids)):
             # Move to CPU and split by sample

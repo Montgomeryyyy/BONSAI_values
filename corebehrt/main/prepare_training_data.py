@@ -26,7 +26,7 @@ def main_prepare_data(config_path):
 
     if cfg.data.type == "pretrain":
         # Setup directories
-        split_data = cfg.data.get("split_data", False)
+        split_data = cfg.data.get("split_data", True)
         DirectoryPreparer(cfg).setup_prepare_pretrain()
         logger = logging.getLogger("prepare pretrain data")
         logger.info("Preparing pretrain data")

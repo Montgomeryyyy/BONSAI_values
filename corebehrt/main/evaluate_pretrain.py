@@ -87,19 +87,41 @@ def main_evaluate_pretrain(config_path):
     print(f"  Max: {max(seq_lengths)}")
     print(f"  Mean: {sum(seq_lengths) / len(seq_lengths):.1f}")
 
-    # Save embeddings and PIDs
+    # Save raw embeddings in fixed-size chunks with a summary
     os.makedirs(cfg.paths.embeddings, exist_ok=True)
-    
-    # Save flattened embeddings and PIDs
-    torch.save(all_embeddings, join(cfg.paths.embeddings, "embeddings.pt"))
-    torch.save(all_pids, join(cfg.paths.embeddings, "pids.pt"))
-    
-    print(f"Embeddings and PIDs saved to {cfg.paths.embeddings}")
-    print("Files saved:")
-    print("  - embeddings.pt: List of embedding tensors (one per sample)")
-    print("  - pids.pt: List of patient IDs (one per sample)")
-    print("  - Each embedding has shape: (sequence_length, hidden_size)")
-    print("  - Each PID is a string corresponding to the embedding at the same index")
+    import json
+    chunk_size = 1000  # samples per chunk
+    summary = {
+        "chunk_size": chunk_size,
+        "num_samples": len(all_embeddings),
+        "hidden_size": all_embeddings[0].shape[1] if all_embeddings else 0,
+        "dtype": str(all_embeddings[0].dtype) if all_embeddings else "unknown",
+        "chunks": [],
+    }
+    for i in range(0, len(all_embeddings), chunk_size):
+        idx = i // chunk_size
+        chunk_embeddings = all_embeddings[i:i+chunk_size]  # keep original dtype
+        chunk_pids = all_pids[i:i+chunk_size]
+
+        chunk_file = join(cfg.paths.embeddings, f"embeddings_chunk_{idx}.pt")
+        torch.save(chunk_embeddings, chunk_file)
+
+        chunk_pids_file = join(cfg.paths.embeddings, f"pids_chunk_{idx}.pt")
+        torch.save(chunk_pids, chunk_pids_file)
+
+        summary["chunks"].append({
+            "embeddings": os.path.basename(chunk_file),
+            "pids": os.path.basename(chunk_pids_file),
+            "start": i,
+            "end": min(i+chunk_size, len(all_embeddings)),
+        })
+        print(f"Saved chunk {idx + 1}/{(len(all_embeddings) + chunk_size - 1)//chunk_size}")
+
+    summary_path = join(cfg.paths.embeddings, "summary.json")
+    with open(summary_path, "w") as f:
+        json.dump(summary, f)
+    print("✅ Saved raw embeddings in chunks with summary")
+    print(f"  - {summary_path}")
 
 
 if __name__ == "__main__":
