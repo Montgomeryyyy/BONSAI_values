@@ -1,0 +1,63 @@
+logging:
+  level: INFO
+  path: ./logs
+  
+data:
+  dataset:
+    select_ratio: .15
+    masking_ratio: .8
+    replace_ratio: .1
+    ignore_special_tokens: true
+  val_ratio: 0.2
+
+trainer_args:
+  batch_size: 512
+  effective_batch_size: 512
+  epochs: 10
+  info: true
+  sampler: null
+  gradient_clip: 
+    clip_value: 1.0
+  shuffle: true
+  early_stopping: null 
+  num_workers: 1
+  compile: false
+  use_autocast: true
+
+model:
+  hidden_size: 96
+  intermediate_size: 192
+  num_hidden_layers: 6
+  num_attention_heads: 6
+  max_position_embeddings: 1024 
+  type_vocab_size: 1000
+  embedding_dropout: 0.1 
+  value_embedding_mode: "film"
+  value_loss_weight: 1
+  learnable_value_weight: true
+
+  #attention_bias: true
+  #global_attn_every_n_layers: 1
+  #local_attention: 512
+  
+optimizer:
+  lr: 5e-4
+  eps: 1e-6
+
+scheduler:
+  _target_: transformers.get_cosine_schedule_with_warmup
+  num_warmup_epochs: 1
+  num_training_epochs: 1
+
+metrics:
+  top1:
+    _target_: corebehrt.modules.monitoring.metrics.PrecisionAtK
+    topk: 1
+  top10:
+    _target_: corebehrt.modules.monitoring.metrics.PrecisionAtK
+
+    topk: 10
+  mlm_loss:
+    _target_: corebehrt.modules.monitoring.metrics.LossAccessor
+    loss_name: loss
+
