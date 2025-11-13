@@ -32,6 +32,10 @@ optimizer:
 scheduler:
   _target_: transformers.get_constant_schedule_with_warmup
   num_warmup_steps: 3
+<<<<<<< HEAD
+=======
+  # num_training_steps: 1000000
+>>>>>>> c00809f6 (added configs)
 
 metrics:
   accuracy:

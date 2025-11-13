@@ -9,7 +9,11 @@ paths:
 
 selection:
   exclude_prior_outcomes: false 
+<<<<<<< HEAD
   exposed_only: true 
+=======
+  exposed_only: false 
+>>>>>>> c00809f6 (added configs)
   age:
     min_years: 0 
     max_years: 120 

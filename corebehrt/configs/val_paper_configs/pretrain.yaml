@@ -32,7 +32,13 @@ model:
   max_position_embeddings: 1024 
   type_vocab_size: 1000
   embedding_dropout: 0.1 
+<<<<<<< HEAD
   
+=======
+  value_loss_weight: 1
+  learnable_value_weight: true
+
+>>>>>>> c00809f6 (added configs)
   #attention_bias: true
   #global_attn_every_n_layers: 1
   #local_attention: 512

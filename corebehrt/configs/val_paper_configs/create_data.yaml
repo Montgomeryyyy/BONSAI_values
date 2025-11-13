@@ -7,11 +7,18 @@ exclude_held_out: false
 features:
   values:
     value_creator_kwargs:
+<<<<<<< HEAD
       num_bins: 25
       bin_mapping_func: 
         _target_: corebehrt.functional.features.values.power_bin_distance_mean
       add_prefix: false # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
+=======
+      bin_values: true
+      num_bins: 100
+      bin_mapping_func: 
+        _target_: corebehrt.functional.features.values.power_bin_distance_mean
+>>>>>>> c00809f6 (added configs)
   agg_kwargs:
     regex: ^(?:L/).* # example regex to aggregate all features that start with 'LAB'
     agg_func: 'first'
