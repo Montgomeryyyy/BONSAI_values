@@ -1,0 +1,22 @@
+logging:
+  level: INFO
+  path: ./logs
+
+exclude_held_out: false
+
+features:
+  values:
+    value_creator_kwargs:
+      null_token: -1
+  agg_kwargs:
+    regex: ^(?:L/).* # example regex to aggregate all features that start with 'LAB'
+    agg_type: 'first'
+    
+tokenizer:
+  #sep_tokens: true
+  cls_token: true
+
+excluder:
+  min_age: -1
+  max_age: 120
+
