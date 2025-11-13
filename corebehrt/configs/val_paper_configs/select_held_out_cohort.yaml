@@ -1,0 +1,22 @@
+logging:
+  level: INFO
+  path: ./outputs/logs
+
+paths:
+  outcome: "synth_pos_diag.csv"
+  exposure: "synth_diag.csv"
+  initial_pids: "pids_held_out.pt"
+  
+selection:
+  exclude_prior_outcomes: false 
+  exposed_only: true 
+  age:
+    min_years: 0 
+    max_years: 120 
+
+index_date: 
+  mode: relative 
+  relative: 
+    n_hours_from_exposure: 0
+
+test_ratio: 1

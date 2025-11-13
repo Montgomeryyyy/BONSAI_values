@@ -87,41 +87,52 @@ def main_evaluate_pretrain(config_path):
     print(f"  Max: {max(seq_lengths)}")
     print(f"  Mean: {sum(seq_lengths) / len(seq_lengths):.1f}")
 
-    # Save raw embeddings in fixed-size chunks with a summary
+    # Compute pooled (mean over sequence) embeddings and save in chunks
     os.makedirs(cfg.paths.embeddings, exist_ok=True)
+    chunks_dir = join(cfg.paths.embeddings, "embeddings")
+    os.makedirs(chunks_dir, exist_ok=True)
+    
     import json
     chunk_size = 1000  # samples per chunk
+    
+    # Compute pooled embeddings (mean over sequence dimension)
+    print("Computing pooled embeddings (mean over sequence)...")
+    pooled_embeddings = []
+    for emb in all_embeddings:
+        pooled = emb.mean(dim=0)  # Shape: (hidden_size,)
+        pooled_embeddings.append(pooled)
+    
     summary = {
         "chunk_size": chunk_size,
-        "num_samples": len(all_embeddings),
-        "hidden_size": all_embeddings[0].shape[1] if all_embeddings else 0,
-        "dtype": str(all_embeddings[0].dtype) if all_embeddings else "unknown",
+        "num_samples": len(pooled_embeddings),
+        "hidden_size": pooled_embeddings[0].shape[0] if pooled_embeddings else 0,
+        "dtype": str(pooled_embeddings[0].dtype) if pooled_embeddings else "unknown",
+        "pooled": True,  # Indicates these are pooled (mean over sequence)
         "chunks": [],
     }
-    for i in range(0, len(all_embeddings), chunk_size):
+    
+    for i in range(0, len(pooled_embeddings), chunk_size):
         idx = i // chunk_size
-        chunk_embeddings = all_embeddings[i:i+chunk_size]  # keep original dtype
+        chunk_embeddings = pooled_embeddings[i:i+chunk_size]  # List of (hidden_size,) tensors
         chunk_pids = all_pids[i:i+chunk_size]
 
-        chunk_file = join(cfg.paths.embeddings, f"embeddings_chunk_{idx}.pt")
+        chunk_file = join(chunks_dir, f"embeddings_chunk_{idx}.pt")
         torch.save(chunk_embeddings, chunk_file)
 
-        chunk_pids_file = join(cfg.paths.embeddings, f"pids_chunk_{idx}.pt")
+        chunk_pids_file = join(chunks_dir, f"pids_chunk_{idx}.pt")
         torch.save(chunk_pids, chunk_pids_file)
 
         summary["chunks"].append({
-            "embeddings": os.path.basename(chunk_file),
-            "pids": os.path.basename(chunk_pids_file),
+            "embeddings": os.path.relpath(chunk_file, cfg.paths.embeddings),
+            "pids": os.path.relpath(chunk_pids_file, cfg.paths.embeddings),
             "start": i,
-            "end": min(i+chunk_size, len(all_embeddings)),
+            "end": min(i+chunk_size, len(pooled_embeddings)),
         })
-        print(f"Saved chunk {idx + 1}/{(len(all_embeddings) + chunk_size - 1)//chunk_size}")
+        print(f"Saved chunk {idx + 1}/{(len(pooled_embeddings) + chunk_size - 1)//chunk_size}")
 
     summary_path = join(cfg.paths.embeddings, "summary.json")
     with open(summary_path, "w") as f:
         json.dump(summary, f)
-    print("✅ Saved raw embeddings in chunks with summary")
-    print(f"  - {summary_path}")
 
 
 if __name__ == "__main__":
