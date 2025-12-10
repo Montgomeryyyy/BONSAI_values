@@ -39,12 +39,9 @@ def main_evaluate_pretrain(config_path):
 
     # Load model
     model_loader = ModelLoader(cfg.paths.model, cfg.paths.get("checkpoint_epoch"))
-    model = model_loader.load_model(
-        CorebehrtForPretraining
-    )
+    model = model_loader.load_model(CorebehrtForPretraining)
     model.to(device)
-    
-    
+
     print(f"Model loaded from {cfg.paths.model}")
     print(f"Using device: {device}")
     if device.type == "cuda":
@@ -67,19 +64,19 @@ def main_evaluate_pretrain(config_path):
         logger=logger,
     )
     all_embeddings, all_pids = inference_runner.inference_loop(return_embeddings=True)
-    
+
     # Print information about the flattened embeddings and PIDs
     print(f"Total samples: {len(all_embeddings)}")
     print(f"Total PIDs: {len(all_pids)}")
     print("Sample information:")
     for i in range(min(5, len(all_embeddings))):
         print(f"  Sample {i}: {all_embeddings[i].shape} with PID: {all_pids[i]}")
-    
+
     # Calculate memory usage
     total_parameters = sum(emb.numel() for emb in all_embeddings)
     print(f"Total parameters: {total_parameters:,}")
     print(f"Memory usage: {total_parameters * 4 / 1024**3:.2f} GB (assuming float32)")
-    
+
     # Show sequence length distribution
     seq_lengths = [emb.shape[0] for emb in all_embeddings]
     print(f"Sequence length stats:")
@@ -91,17 +88,18 @@ def main_evaluate_pretrain(config_path):
     os.makedirs(cfg.paths.embeddings, exist_ok=True)
     chunks_dir = join(cfg.paths.embeddings, "embeddings")
     os.makedirs(chunks_dir, exist_ok=True)
-    
+
     import json
+
     chunk_size = 1000  # samples per chunk
-    
+
     # Compute pooled embeddings (mean over sequence dimension)
     print("Computing pooled embeddings (mean over sequence)...")
     pooled_embeddings = []
     for emb in all_embeddings:
         pooled = emb.mean(dim=0)  # Shape: (hidden_size,)
         pooled_embeddings.append(pooled)
-    
+
     summary = {
         "chunk_size": chunk_size,
         "num_samples": len(pooled_embeddings),
@@ -110,11 +108,13 @@ def main_evaluate_pretrain(config_path):
         "pooled": True,  # Indicates these are pooled (mean over sequence)
         "chunks": [],
     }
-    
+
     for i in range(0, len(pooled_embeddings), chunk_size):
         idx = i // chunk_size
-        chunk_embeddings = pooled_embeddings[i:i+chunk_size]  # List of (hidden_size,) tensors
-        chunk_pids = all_pids[i:i+chunk_size]
+        chunk_embeddings = pooled_embeddings[
+            i : i + chunk_size
+        ]  # List of (hidden_size,) tensors
+        chunk_pids = all_pids[i : i + chunk_size]
 
         chunk_file = join(chunks_dir, f"embeddings_chunk_{idx}.pt")
         torch.save(chunk_embeddings, chunk_file)
@@ -122,13 +122,17 @@ def main_evaluate_pretrain(config_path):
         chunk_pids_file = join(chunks_dir, f"pids_chunk_{idx}.pt")
         torch.save(chunk_pids, chunk_pids_file)
 
-        summary["chunks"].append({
-            "embeddings": os.path.relpath(chunk_file, cfg.paths.embeddings),
-            "pids": os.path.relpath(chunk_pids_file, cfg.paths.embeddings),
-            "start": i,
-            "end": min(i+chunk_size, len(pooled_embeddings)),
-        })
-        print(f"Saved chunk {idx + 1}/{(len(pooled_embeddings) + chunk_size - 1)//chunk_size}")
+        summary["chunks"].append(
+            {
+                "embeddings": os.path.relpath(chunk_file, cfg.paths.embeddings),
+                "pids": os.path.relpath(chunk_pids_file, cfg.paths.embeddings),
+                "start": i,
+                "end": min(i + chunk_size, len(pooled_embeddings)),
+            }
+        )
+        print(
+            f"Saved chunk {idx + 1}/{(len(pooled_embeddings) + chunk_size - 1) // chunk_size}"
+        )
 
     summary_path = join(cfg.paths.embeddings, "summary.json")
     with open(summary_path, "w") as f:

@@ -11,7 +11,7 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
-    SEGMENT_COL
+    SEGMENT_COL,
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
@@ -22,6 +22,7 @@ from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function
 from corebehrt.functional.features.values import get_unique_value_counts
+
 
 def load_tokenize_and_save(
     features_path: str,
@@ -54,9 +55,11 @@ def make_bin_mapping(bin_mapping_func, features_path):
     Makes a bin mapping from a function.
     """
 
-    values_counts = get_unique_value_counts(features_path, splits=["train", "tuning"])    
+    values_counts = get_unique_value_counts(features_path, splits=["train", "tuning"])
     mapping_func = instantiate_function(bin_mapping_func)
-    bin_mapping = {concept: mapping_func(values_counts[concept]) for concept in values_counts}
+    bin_mapping = {
+        concept: mapping_func(values_counts[concept]) for concept in values_counts
+    }
     return bin_mapping
 
 
@@ -71,8 +74,15 @@ def create_and_save_features(cfg, splits, logger) -> None:
     )
 
     # Extract bin mapping configuration
-    bin_mapping_func = cfg.get("features", {}).get("values", {}).get("value_creator_kwargs", {}).get("bin_mapping_func")
-    bin_mapping = make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
+    bin_mapping_func = (
+        cfg.get("features", {})
+        .get("values", {})
+        .get("value_creator_kwargs", {})
+        .get("bin_mapping_func")
+    )
+    bin_mapping = (
+        make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
+    )
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -220,7 +230,10 @@ def handle_aggregations(
 
 
 def handle_numeric_values(
-    concepts: pd.DataFrame, features_cfg: dict = None, bin_mapping: dict = None, value_type: str = "discrete"
+    concepts: pd.DataFrame,
+    features_cfg: dict = None,
+    bin_mapping: dict = None,
+    value_type: str = "discrete",
 ) -> pd.DataFrame:
     """
     Process numeric values in concepts DataFrame based on configuration.
@@ -253,6 +266,7 @@ def handle_numeric_values(
             raise ValueError(f"Unsupported value type: {value_type}")
 
     return concepts.drop(columns=["numeric_value"])
+
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
     """Assign segment numbers to each row within each PID group."""

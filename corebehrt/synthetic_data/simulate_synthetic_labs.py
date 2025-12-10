@@ -63,7 +63,7 @@ CONCEPT_RELATIONSHIPS = {
                     "min_days": 10,
                     "max_days": 180,
                 },
-            }
+            },
         },
     },
 }

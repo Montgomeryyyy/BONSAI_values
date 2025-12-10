@@ -226,4 +226,6 @@ class IndexDateHandler:
                 pids, n_hours_from_maximum_index_date, maximum_index_dates
             ).reset_index()
 
-        return cls.draw_index_dates_for_unexposed(pids, exposed_timestamps, minimum_index_dates, maximum_index_dates)
+        return cls.draw_index_dates_for_unexposed(
+            pids, exposed_timestamps, minimum_index_dates, maximum_index_dates
+        )

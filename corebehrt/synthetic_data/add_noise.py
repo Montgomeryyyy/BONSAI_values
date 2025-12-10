@@ -31,6 +31,7 @@ DEFAULT_SEED = 42  # Fixed seed for reproducibility
 POS_DIAG = "S/DIAG_POSITIVE"
 NEG_DIAG = "S/DIAG_NEGATIVE"
 
+
 def add_label_noise(
     data: pd.DataFrame, switch_percentage: float = 0.05
 ) -> pd.DataFrame:
@@ -91,7 +92,10 @@ def add_label_noise(
         )
 
         # Swap the diagnoses by changing the codes
-        if noisy_data[pos_diag_mask].shape[0] > 0 and noisy_data[neg_diag_mask].shape[0] > 0:
+        if (
+            noisy_data[pos_diag_mask].shape[0] > 0
+            and noisy_data[neg_diag_mask].shape[0] > 0
+        ):
             # Change positive patient's diagnosis to negative
             noisy_data.loc[pos_diag_mask, "code"] = NEG_DIAG
             # Change negative patient's diagnosis to positive

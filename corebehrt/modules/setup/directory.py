@@ -15,7 +15,7 @@ from corebehrt.constants.paths import (
     PREPARE_FINETUNE_CFG,
     EVALUATE_CFG,
     XGBOOST_CFG,
-    EVALUATE_PRETRAIN_CFG
+    EVALUATE_PRETRAIN_CFG,
 )
 from corebehrt.functional.setup.checks import check_categories
 from corebehrt.modules.setup.config import Config, load_config
@@ -475,6 +475,7 @@ class DirectoryPreparer:
         self.check_directory("test_data_dir")
         self.create_directory("embeddings", clear=True)
         self.write_config("embeddings", name=EVALUATE_PRETRAIN_CFG)
+
     #
     # Directory naming generators
     #

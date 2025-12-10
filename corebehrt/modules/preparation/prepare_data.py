@@ -174,7 +174,9 @@ class DatasetPreparer:
 
         return data
 
-    def prepare_pretrain_data(self, save_data=False, mode="train") -> Tuple[PatientDataset, dict]:
+    def prepare_pretrain_data(
+        self, save_data=False, mode="train"
+    ) -> Tuple[PatientDataset, dict]:
         data_cfg = self.cfg.data
         paths_cfg = self.cfg.paths
 
