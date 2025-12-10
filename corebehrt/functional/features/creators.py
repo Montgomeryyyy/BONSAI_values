@@ -1,7 +1,4 @@
-import uuid
 import warnings
-
-import numpy as np
 import pandas as pd
 
 from corebehrt.constants.data import (

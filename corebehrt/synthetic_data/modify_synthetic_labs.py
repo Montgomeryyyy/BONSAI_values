@@ -8,12 +8,10 @@ import argparse
 from pathlib import Path
 from typing import Optional
 import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 

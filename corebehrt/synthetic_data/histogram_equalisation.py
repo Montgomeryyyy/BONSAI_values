@@ -8,7 +8,6 @@ import argparse
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from scipy import stats
 from theoretical_separation import cohens_d, sweep_threshold_auc, scipy_mann_whitney_u
 
 # Default parameters
@@ -318,7 +317,7 @@ def main():
 
     # Print original statistics
     print_statistics(data, "Original lab value statistics")
-    original_performance = calculate_theoretical_performance(data)
+    _ = calculate_theoretical_performance(data)
 
     # Apply histogram equalisation
     equalised_data = apply_histogram_equalisation(data, args.lab_code, args.n_bins)

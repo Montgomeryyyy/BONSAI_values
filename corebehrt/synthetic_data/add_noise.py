@@ -11,7 +11,6 @@ import os
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 
@@ -296,7 +295,7 @@ def create_comparison_plot(
     noisy_negative = noisy_lab_data[~noisy_lab_data["is_positive"]]["numeric_value"]
 
     # Create subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
     # Original distribution
     ax1.hist(original_positive, bins=30, alpha=0.7, label="With Diagnosis", color="red")
@@ -340,7 +339,6 @@ def calculate_theoretical_performance(data: pd.DataFrame) -> dict:
 
     # Get diagnostic data to identify positive/negative patients
     diag_mask = data["code"] == POS_DIAG
-    positive_patients = set(data[diag_mask]["subject_id"].unique())
 
     # Count patients with and without lab data
     all_patients = set(data["subject_id"].unique())

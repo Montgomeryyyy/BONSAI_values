@@ -2,9 +2,7 @@
 Simulate synthetic medical data with correlated lab values.
 """
 
-import os
-import uuid
-from typing import List, Dict, Tuple, Optional
+from typing import List, Tuple, Optional
 import numpy as np
 import pandas as pd
 import argparse

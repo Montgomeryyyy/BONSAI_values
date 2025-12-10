@@ -1,18 +1,12 @@
 import logging
 from os.path import join
-import pandas as pd
 import torch
 import os
 
-from corebehrt.constants.paths import FOLDS_FILE, PREPARED_ALL_PATIENTS
+from corebehrt.constants.paths import PREPARED_ALL_PATIENTS
 from corebehrt.functional.setup.args import get_args
-from corebehrt.main.helper.evaluate_finetune import inference_fold, compute_metrics
-from corebehrt.main.helper.finetune_cv import check_for_overlap
-from corebehrt.modules.preparation.dataset import BinaryOutcomeDataset, PatientDataset
 from corebehrt.modules.setup.config import load_config
 from corebehrt.modules.setup.directory import DirectoryPreparer
-from corebehrt.modules.setup.config import instantiate_function
-from corebehrt.modules.setup.manager import ModelManager
 from corebehrt.modules.model.model import (
     CorebehrtForPretraining,
 )
