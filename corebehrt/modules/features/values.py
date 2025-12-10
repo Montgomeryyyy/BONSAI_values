@@ -2,7 +2,7 @@ import pandas as pd
 from corebehrt.constants.data import CONCEPT_COL
 
 
-class ValueCreator:
+class ValueCreatorDiscrete:
     """
     A class to load normalise values in data frames.
     Expects a 'result' column and 'concept' column to be present.
@@ -41,14 +41,14 @@ class ValueCreator:
         # Apply binning per concept if bin_mapping is provided
         if bin_mapping is not None:
             concepts["binned_value"] = concepts.groupby(CONCEPT_COL).apply(
-                lambda group: ValueCreator.bin(
+                lambda group: ValueCreatorDiscrete.bin(
                     group["numeric_value"], 
                     num_bins=bin_mapping.get(group[CONCEPT_COL].iloc[0], num_bins)
                 ) if group["numeric_value"].notna().any() 
                 else pd.Series([None] * len(group), index=group.index)
             ).reset_index(level=0, drop=True)
         else:
-            concepts["binned_value"] = ValueCreator.bin(
+            concepts["binned_value"] = ValueCreatorDiscrete.bin(
                 concepts["numeric_value"], num_bins=num_bins
             )
 

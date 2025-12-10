@@ -17,7 +17,7 @@ from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
 from corebehrt.modules.features.loader import FormattedDataLoader
 from corebehrt.modules.features.tokenizer import EHRTokenizer
-from corebehrt.modules.features.values import ValueCreator
+from corebehrt.modules.features.values import ValueCreatorDiscrete
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function
@@ -220,7 +220,7 @@ def handle_aggregations(
 
 
 def handle_numeric_values(
-    concepts: pd.DataFrame, features_cfg: dict = None, bin_mapping: dict = None
+    concepts: pd.DataFrame, features_cfg: dict = None, bin_mapping: dict = None, value_type: str = "discrete"
 ) -> pd.DataFrame:
     """
     Process numeric values in concepts DataFrame based on configuration.
@@ -241,13 +241,16 @@ def handle_numeric_values(
         )
         if separator_regex is not None and not is_valid_regex(separator_regex):
             raise ValueError(f"Invalid regex: {separator_regex}")
-        return ValueCreator.bin_results(
-            concepts,
-            num_bins=num_bins,
-            bin_mapping=bin_mapping,
-            add_prefix=add_prefix,
-            separator_regex=separator_regex,
-        )
+        if value_type == "discrete":
+            return ValueCreatorDiscrete.bin_results(
+                concepts,
+                num_bins=num_bins,
+                bin_mapping=bin_mapping,
+                add_prefix=add_prefix,
+                separator_regex=separator_regex,
+            )
+        else:
+            raise ValueError(f"Unsupported value type: {value_type}")
 
     return concepts.drop(columns=["numeric_value"])
 
