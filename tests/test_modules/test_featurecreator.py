@@ -102,8 +102,6 @@ class TestFeatureCreator(unittest.TestCase):
         self.assertTrue(any(result[CONCEPT_COL].str.startswith("BG_GENDER")))
         # Compare the segment values
 
-        print(result["segment"].values)
-        print(self.expected_segments.values)
         self.assertTrue(
             (result["segment"].values == self.expected_segments.values).all()
         )
