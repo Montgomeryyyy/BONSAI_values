@@ -54,7 +54,9 @@ class TestCreators(unittest.TestCase):
         )
 
     def test_create_binned_value(self):
-        binned_values = ValueCreatorDiscrete.bin_results(self.concepts_pd_normed, num_bins=100)
+        binned_values = ValueCreatorDiscrete.bin_results(
+            self.concepts_pd_normed, num_bins=100
+        )
         sorted_concepts = list(
             binned_values.sort_values(by=["index", "order"]).sort_index()["code"]
         )
@@ -150,7 +152,9 @@ class TestCreators(unittest.TestCase):
 
         # This should not raise an error
         try:
-            binned_values = ValueCreatorDiscrete.bin_results(single_nan_df, num_bins=100)
+            binned_values = ValueCreatorDiscrete.bin_results(
+                single_nan_df, num_bins=100
+            )
             self.assertIsInstance(binned_values, pd.DataFrame)
         except ValueError as e:
             self.fail(f"bin_results raised ValueError with single NaN value: {e}")

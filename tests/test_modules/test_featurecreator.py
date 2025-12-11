@@ -1,7 +1,7 @@
 import unittest
-import warnings
 from datetime import datetime
-
+import io
+import sys
 import pandas as pd
 from pandas import NaT
 
@@ -96,7 +96,9 @@ class TestFeatureCreator(unittest.TestCase):
         self.assertEqual(len(result["segment"]), len(self.expected_segments))
 
     def test_create_background(self):
-        result, _ = self.feature_creator(self.concepts, use_admission_ids_for_segments=True)
+        result, _ = self.feature_creator(
+            self.concepts, use_admission_ids_for_segments=True
+        )
         self.assertTrue(any(result[CONCEPT_COL].str.startswith("BG_GENDER")))
         # Compare the segment values
 
@@ -113,13 +115,10 @@ class TestFeatureCreator(unittest.TestCase):
             concepts_wo_dob[CONCEPT_COL] == "DOB"
         )
         concepts_wo_dob = concepts_wo_dob[~patient_1_dob_mask].copy()
-        
-        # Capture stdout to check for warning message
-        import io
-        import sys
+
         captured_output = io.StringIO()
         sys.stdout = captured_output
-        
+
         try:
             result, _ = self.feature_creator(concepts_wo_dob)
             # Check that patient 1 is excluded from results

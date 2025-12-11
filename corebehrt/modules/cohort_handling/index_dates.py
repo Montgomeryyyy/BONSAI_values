@@ -127,7 +127,4 @@ class IndexDateHandler:
             pids, n_hours, exposures
         )
 
-
-        return cls.draw_index_dates_for_unexposed(
-            pids, exposed_timestamps
-        )
+        return cls.draw_index_dates_for_unexposed(pids, exposed_timestamps)

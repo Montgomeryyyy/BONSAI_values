@@ -219,7 +219,6 @@ def sort_features(concepts: pd.DataFrame) -> pd.DataFrame:
     return concepts
 
 
-
 def create_adm_segments(concepts: pd.DataFrame) -> pd.DataFrame:
     """
     Assign segments to the concepts DataFrame based on 'ADMISSION_ID', ensuring that

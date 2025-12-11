@@ -137,25 +137,27 @@ def create_and_save_features(cfg, splits, logger) -> None:
             features_cfg = cfg.get("features", {})
             value_type = features_cfg.get("values", {}).get("value_type", None)
             logger.info(f"Value type: {value_type}")
-            
+
             # Use admission IDs for segments only if value_type is not "discrete" or "combined"
-            make_adm_segments = (
-                value_type not in ["discrete", "combined"]
-                and features_cfg.get("use_admission_ids_for_segments", False)
-            )
+            make_adm_segments = value_type not in [
+                "discrete",
+                "combined",
+            ] and features_cfg.get("use_admission_ids_for_segments", False)
             logger.info(f"Using admission IDs for segments: {make_adm_segments}")
-            
+
             # Create row IDs if not using admission-based segments
             if not make_adm_segments:
                 concepts = create_row_id(concepts)
-            
+
             # Handle numeric values
             if value_type is not None:
-                concepts = handle_numeric_values(concepts, features_cfg, bin_mapping, value_type)
+                concepts = handle_numeric_values(
+                    concepts, features_cfg, bin_mapping, value_type
+                )
             else:
                 concepts = concepts.drop(columns=["numeric_value"])
                 logger.warning("No value type found, dropping numeric_value column")
-            
+
             # Create features
             feature_creator = FeatureCreator()
             features, patient_info = feature_creator(
