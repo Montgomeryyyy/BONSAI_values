@@ -143,6 +143,7 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 "discrete",
                 "combined",
             ] and features_cfg.get("use_admission_ids_for_segments", False)
+            make_adm_segments = True
             logger.info(f"Using admission IDs for segments: {make_adm_segments}")
 
             # Create row IDs if not using admission-based segments

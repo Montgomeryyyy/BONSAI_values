@@ -152,7 +152,7 @@ For running BONSAI on Azure cloud infrastructure using SDK v2, refer to the [Azu
 - Environment preparation
 
 # Values
-BONSAI supports handling numerical values (e.g., lab results, vital signs) through **discretisation**, **seperate_layer**, and **combined**. For details on this refer to [main README](corebehrt/main/README.md).
+BONSAI supports handling numerical values (e.g., lab results, risk scores) through **discretisation**, **seperate_layer**, and **combined**. For details on this refer to [main README](corebehrt/main/README.md).
 
 ## Contributing
 
