@@ -6,7 +6,7 @@ from pandas import NaT
 from corebehrt.functional.features.creators import (
     create_age_in_years,
     create_abspos,
-    create_segments,
+    create_adm_segments,
     create_background,
     sort_features,
 )
@@ -195,7 +195,7 @@ class TestCreators(unittest.TestCase):
 
         # Apply the function
         sorted_concepts = sort_features(concepts_with_abspos)
-        result = create_segments(sorted_concepts)
+        result = create_adm_segments(sorted_concepts)
 
         # Assert the segments are as expected
         self.assertTrue((result["segment"] == self.expected_segments).all())

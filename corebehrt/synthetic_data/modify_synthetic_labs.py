@@ -83,7 +83,6 @@ def modify_lab_values(data: pd.DataFrame) -> pd.DataFrame:
 
     # For each lab entry, generate a new value based on the patient's condition
     for idx in modified_data[lab_mask].index:
-        patient_id = modified_data.at[idx, "subject_id"]
         is_positive = modified_data.at[idx, "is_positive"]
         condition = "high" if is_positive else "low"
 

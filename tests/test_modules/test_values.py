@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 import pandas as pd
 
-from corebehrt.modules.features.values import ValueCreator
+from corebehrt.modules.features.values import ValueCreatorDiscrete
 
 
 class TestCreators(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestCreators(unittest.TestCase):
         )
 
     def test_create_binned_value(self):
-        binned_values = ValueCreator.bin_results(self.concepts_pd_normed, num_bins=100)
+        binned_values = ValueCreatorDiscrete.bin_results(self.concepts_pd_normed, num_bins=100)
         sorted_concepts = list(
             binned_values.sort_values(by=["index", "order"]).sort_index()["code"]
         )
@@ -75,7 +75,7 @@ class TestCreators(unittest.TestCase):
         self.assertEqual(sorted_concepts, expected_flattened_binned_concepts)
 
     def test_create_binned_value_with_prefix(self):
-        binned_values = ValueCreator.bin_results(
+        binned_values = ValueCreatorDiscrete.bin_results(
             self.concepts_pd_normed_prefix,
             num_bins=100,
             add_prefix=True,
@@ -119,7 +119,7 @@ class TestCreators(unittest.TestCase):
 
         # This should not raise an error
         try:
-            binned_values = ValueCreator.bin_results(nan_df, num_bins=100)
+            binned_values = ValueCreatorDiscrete.bin_results(nan_df, num_bins=100)
             self.assertIsInstance(binned_values, pd.DataFrame)
         except ValueError as e:
             self.fail(f"bin_results raised ValueError with all-NaN input: {e}")
@@ -131,7 +131,7 @@ class TestCreators(unittest.TestCase):
 
         # This should not raise an error
         try:
-            binned_values = ValueCreator.bin_results(empty_df, num_bins=100)
+            binned_values = ValueCreatorDiscrete.bin_results(empty_df, num_bins=100)
             self.assertIsInstance(binned_values, pd.DataFrame)
         except ValueError as e:
             self.fail(f"bin_results raised ValueError with empty DataFrame: {e}")
@@ -150,7 +150,7 @@ class TestCreators(unittest.TestCase):
 
         # This should not raise an error
         try:
-            binned_values = ValueCreator.bin_results(single_nan_df, num_bins=100)
+            binned_values = ValueCreatorDiscrete.bin_results(single_nan_df, num_bins=100)
             self.assertIsInstance(binned_values, pd.DataFrame)
         except ValueError as e:
             self.fail(f"bin_results raised ValueError with single NaN value: {e}")

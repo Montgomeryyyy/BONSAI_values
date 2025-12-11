@@ -337,9 +337,6 @@ def calculate_theoretical_performance(data: pd.DataFrame) -> dict:
     lab_mask = data["code"] == "S/LAB1"
     lab_data = data[lab_mask]
 
-    # Get diagnostic data to identify positive/negative patients
-    diag_mask = data["code"] == POS_DIAG
-
     # Count patients with and without lab data
     all_patients = set(data["subject_id"].unique())
     patients_with_labs = set(lab_data["subject_id"].unique())
@@ -475,7 +472,7 @@ def main():
 
     # Print original statistics
     print_statistics(data, "Original lab value statistics")
-    original_performance = calculate_theoretical_performance(data)
+    _ = calculate_theoretical_performance(data)
 
     # Apply noise
     noisy_data = data.copy()

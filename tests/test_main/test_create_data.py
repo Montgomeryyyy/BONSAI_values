@@ -28,6 +28,9 @@ class TestCreateData(TestMainScript):
                 },
                 "tokenizer": {"sep_tokens": True, "cls_token": True},
                 "excluder": {"min_age": -1, "max_age": 120},
+                "features": {
+                    "use_admission_ids_for_segments": True,
+                },
             }
         )
 

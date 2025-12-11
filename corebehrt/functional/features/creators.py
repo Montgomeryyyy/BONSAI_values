@@ -1,5 +1,7 @@
 import warnings
 import pandas as pd
+import numpy as np
+import uuid
 
 from corebehrt.constants.data import (
     ABSPOS_COL,
@@ -13,8 +15,12 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
+    ADMISSION_ID_COL,
+    ADMISSION,
+    DISCHARGE,
 )
 from corebehrt.functional.utils.time import get_hours_since_epoch
+from corebehrt.functional.features.normalize import normalize_segments_series
 
 
 def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:
@@ -146,6 +152,10 @@ def create_background(concepts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     # Create a copy to avoid modifying the original DataFrame
     concepts = concepts.copy()
 
+    if len(concepts) == 0:
+        warnings.warn("No concepts found in concepts")
+        return concepts, pd.DataFrame()
+
     # Extract birthdates from DOB rows
     dob_rows = concepts[concepts[CONCEPT_COL] == BIRTH_CODE]
     birthdates = dict(zip(dob_rows[PID_COL], dob_rows[TIMESTAMP_COL]))
@@ -207,3 +217,208 @@ def sort_features(concepts: pd.DataFrame) -> pd.DataFrame:
         concepts = concepts.sort_values([PID_COL, ABSPOS_COL])
 
     return concepts
+
+
+
+def create_adm_segments(concepts: pd.DataFrame) -> pd.DataFrame:
+    """
+    Assign segments to the concepts DataFrame based on 'ADMISSION_ID', ensuring that
+    events are ordered correctly within each 'PID'.
+    Parameters:
+        concepts: concepts with 'PID', 'ADMISSION_ID', and 'abspos' columns.
+    Returns:
+        concepts with a new 'segment' column
+    """
+    concepts = _assign_admission_ids(concepts)
+    concepts[SEGMENT_COL] = np.nan
+
+    # Assign maximum segment to 'Death' concepts
+    concepts = _assign_segments(concepts)
+    concepts = assign_segments_to_death(concepts)
+    return concepts
+
+
+def _assign_admission_ids(concepts: pd.DataFrame) -> pd.DataFrame:
+    """
+    Assign 'admission_id' to each row in concepts based on 'ADMISSION' and 'DISCHARGE' events.
+    Assigns the same 'admission_id' to all events between 'ADMISSION' and 'DISCHARGE' events.
+    If no 'ADMISSION' and 'DISCHARGE' events are present, assigns a new 'admission_id' to all events
+    if the time between them is greater than 48 hours.
+    """
+
+    def _get_adm_id():
+        return str(uuid.uuid4())
+
+    # Work with a copy to avoid modifying the original
+    result = concepts.copy()
+    result[ADMISSION_ID_COL] = None
+    result[ADMISSION_ID_COL] = result[ADMISSION_ID_COL].astype(object)
+
+    result = result.sort_values(by=[PID_COL, TIMESTAMP_COL])
+
+    has_admission = (result[CONCEPT_COL].str.startswith(ADMISSION, na=False)).any()
+    has_discharge = (result[CONCEPT_COL].str.startswith(DISCHARGE, na=False)).any()
+
+    if has_admission and has_discharge:
+        new_result = _assign_explicit_admission_ids(result, _get_adm_id)
+    else:
+        new_result = _assign_time_based_admission_ids(result, _get_adm_id)
+
+    result[ADMISSION_ID_COL] = new_result[ADMISSION_ID_COL]
+
+    return result
+
+
+def _assign_time_based_admission_ids(
+    patient_data: pd.DataFrame, get_adm_id_func
+) -> pd.DataFrame:
+    """
+    Assign admission IDs based on 48-hour time gaps.
+    Admission IDs are only shared between events of the same patient.
+    """
+    patient_data = patient_data.copy()
+
+    if len(patient_data) == 0:
+        patient_data[ADMISSION_ID_COL] = None
+        patient_data[ADMISSION_ID_COL] = patient_data[ADMISSION_ID_COL].astype(object)
+        return patient_data
+
+    # Calculate time differences using vectorized operations
+    time_diff = patient_data[TIMESTAMP_COL].diff().dt.total_seconds()
+
+    # Mark new admissions (first event or gap > 48 hours)
+    new_admission = (time_diff > 48 * 3600) | time_diff.isna()
+
+    # Also mark new admission when patient ID changes
+    new_admission = new_admission | (
+        patient_data[PID_COL] != patient_data[PID_COL].shift()
+    )
+
+    # Create admission groups using cumsum
+    admission_groups = new_admission.cumsum()
+
+    # Generate unique admission IDs for each group
+    unique_groups = admission_groups.unique()
+    group_to_id = {group: get_adm_id_func() for group in unique_groups}
+    patient_data[ADMISSION_ID_COL] = admission_groups.map(group_to_id).astype(object)
+
+    return patient_data
+
+
+def _assign_explicit_admission_ids(
+    patient_data: pd.DataFrame, get_adm_id_func
+) -> pd.DataFrame:
+    """
+    Assign admission IDs based on explicit ADMISSION and DISCHARGE events.
+    Events outside admission periods are grouped by 48-hour rule.
+    Admission IDs are only shared between events of the same patient.
+    """
+    patient_data = patient_data.copy()
+
+    if len(patient_data) == 0:
+        patient_data[ADMISSION_ID_COL] = None
+        patient_data[ADMISSION_ID_COL] = patient_data[ADMISSION_ID_COL].astype(object)
+        return patient_data
+
+    # Pre-process codes and timestamps to avoid repeated lookups
+    codes = patient_data[CONCEPT_COL].fillna("").values
+    timestamps = patient_data[TIMESTAMP_COL].values
+    pids = patient_data[PID_COL].values
+
+    # Initialize result array
+    admission_ids = [None] * len(patient_data)
+
+    # Track admission state per patient
+    patient_states = {}  # pid -> (current_admission_id, current_outside_id, last_timestamp)
+
+    # Process events using direct array iteration instead of iterrows
+    for i, (code, timestamp, pid) in enumerate(zip(codes, timestamps, pids)):
+        # Initialize patient state if not exists
+        if pid not in patient_states:
+            patient_states[pid] = (None, None, None)
+
+        current_admission_id, current_outside_id, last_timestamp = patient_states[pid]
+
+        if code.startswith(ADMISSION):
+            # Start new admission
+            current_admission_id = get_adm_id_func()
+            admission_ids[i] = current_admission_id
+            # Reset outside admission tracking
+            current_outside_id = None
+            last_timestamp = None
+
+        elif code.startswith(DISCHARGE):
+            # End current admission
+            if current_admission_id is not None:
+                admission_ids[i] = current_admission_id
+            else:
+                # Discharge without admission - assign unique ID
+                admission_ids[i] = get_adm_id_func()
+            current_admission_id = None
+            # Reset outside admission tracking
+            current_outside_id = None
+            last_timestamp = None
+
+        else:
+            # Regular event
+            if current_admission_id is not None:
+                # Inside admission period
+                admission_ids[i] = current_admission_id
+            else:
+                # Outside admission period - apply 48-hour rule
+                if (
+                    current_outside_id is None
+                    or last_timestamp is None
+                    or pd.isna(timestamp)
+                    or pd.isna(last_timestamp)
+                    or (
+                        pd.Timestamp(timestamp) - pd.Timestamp(last_timestamp)
+                    ).total_seconds()
+                    > 48 * 3600
+                ):
+                    # Start new outside-admission group
+                    current_outside_id = get_adm_id_func()
+
+                admission_ids[i] = current_outside_id
+                last_timestamp = timestamp
+
+        # Update patient state
+        patient_states[pid] = (current_admission_id, current_outside_id, last_timestamp)
+
+    # Assign results using vectorized assignment
+    patient_data[ADMISSION_ID_COL] = pd.Series(
+        admission_ids, index=patient_data.index, dtype=object
+    )
+
+    return patient_data
+
+
+def _assign_segments(df):
+    """
+    Assign segments to the concepts DataFrame based on 'admission_id'
+    """
+    # Group by 'PID' and apply factorize to 'ADMISSION_ID'
+    df[SEGMENT_COL] = df.groupby(PID_COL)[ADMISSION_ID_COL].transform(
+        normalize_segments_series
+    )
+    return df
+
+
+def assign_segments_to_death(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Assign the maximum segment to 'DOD' concepts within each 'subject_id'.
+    Parameters:
+        df with 'subject_id', 'code', and 'segment' columns.
+    Returns:
+        df with 'DOD' concepts assigned to the maximum segment.
+    """
+    # Compute the maximum segment per 'PID'
+    max_segment = (
+        df.groupby(PID_COL)[SEGMENT_COL].max().rename("max_segment").reset_index()
+    )
+    # Merge and assign
+    df = df.merge(max_segment, on=PID_COL, how="left")
+    df[SEGMENT_COL] = df[SEGMENT_COL].where(
+        df[CONCEPT_COL] != DEATH_CODE, df["max_segment"]
+    )
+    return df.drop(columns=["max_segment"])

@@ -133,10 +133,34 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
-            concepts = create_row_id(concepts)
-            concepts = handle_numeric_values(concepts, cfg.get("features"), bin_mapping)
+            # Determine value type and segment creation strategy
+            features_cfg = cfg.get("features", {})
+            value_type = features_cfg.get("values", {}).get("value_type", None)
+            logger.info(f"Value type: {value_type}")
+            
+            # Use admission IDs for segments only if value_type is not "discrete" or "combined"
+            make_adm_segments = (
+                value_type not in ["discrete", "combined"]
+                and features_cfg.get("use_admission_ids_for_segments", False)
+            )
+            logger.info(f"Using admission IDs for segments: {make_adm_segments}")
+            
+            # Create row IDs if not using admission-based segments
+            if not make_adm_segments:
+                concepts = create_row_id(concepts)
+            
+            # Handle numeric values
+            if value_type is not None:
+                concepts = handle_numeric_values(concepts, features_cfg, bin_mapping, value_type)
+            else:
+                concepts = concepts.drop(columns=["numeric_value"])
+                logger.warning("No value type found, dropping numeric_value column")
+            
+            # Create features
             feature_creator = FeatureCreator()
-            features, patient_info = feature_creator(concepts)
+            features, patient_info = feature_creator(
+                concepts, use_admission_ids_for_segments=make_adm_segments
+            )
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
@@ -233,7 +257,7 @@ def handle_numeric_values(
     concepts: pd.DataFrame,
     features_cfg: dict = None,
     bin_mapping: dict = None,
-    value_type: str = "discrete",
+    value_type: str = None,
 ) -> pd.DataFrame:
     """
     Process numeric values in concepts DataFrame based on configuration.

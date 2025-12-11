@@ -13,6 +13,7 @@ paths:
 # exclude_held_out: true # exclude held out patients data creation
 
 features:
+  use_admission_ids_for_segments: false # option to use admission ids for segments. Overrides to false if value_type is discrete or combined. 
   exclude_regex: ^(?:LAB).* # example regex to exclude all features that start with 'LAB'
   values:
     value_type: "discrete"
