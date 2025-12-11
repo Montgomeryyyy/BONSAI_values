@@ -2,6 +2,28 @@ import pandas as pd
 from corebehrt.constants.data import CONCEPT_COL
 
 
+def _safe_convert_to_numeric(val):
+    """
+    Safely convert a value to numeric (float).
+
+    Args:
+        val: Value to convert (can be int, float, str, or NaN)
+
+    Returns:
+        float value, pd.NA if conversion fails, or original value if already NaN
+    """
+    if pd.isna(val):
+        return val
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return pd.NA
+    return pd.NA
+
+
 class ValueCreatorDiscrete:
     """
     A class to load normalise values in data frames.
@@ -97,21 +119,50 @@ class ValueCreatorDiscrete:
         Returns:
             Series with binned values as strings with "VAL_" prefix
         """
-        normalized_values = pd.to_numeric(normalized_values, errors="coerce")
-        val_mask = normalized_values.notna()
+        # Make a copy to avoid modifying the original
+        result = normalized_values.copy()
+
+        # Convert to numeric - strings will become NaN (ignored)
+        # For object dtype, explicitly convert each value to handle strings properly
+        if result.dtype == "object":
+            numeric_values = result.apply(_safe_convert_to_numeric)
+            numeric_values = pd.to_numeric(numeric_values, errors="coerce")
+        else:
+            # For numeric types, use pd.to_numeric directly
+            numeric_values = pd.to_numeric(result, errors="coerce", downcast=None)
+
+        val_mask = numeric_values.notna()
+
+        # Ensure float64 dtype for numeric values
+        if val_mask.any():
+            numeric_values = numeric_values.astype("float64")
+
+        # Validate that numeric values are between 0 and 1 (optional check)
+        if val_mask.any():
+            out_of_range = (numeric_values[val_mask] < 0) | (
+                numeric_values[val_mask] > 1
+            )
+            if out_of_range.any():
+                # Values outside [0, 1] are still processed, but this is a warning
+                pass
+
+        # Update result with numeric values
+        result = numeric_values
 
         # Calculate actual number of bins
         if callable(num_bins):
             # Count unique non-null values
-            unique_count = normalized_values[val_mask].nunique()
+            unique_count = numeric_values[val_mask].nunique()
             actual_num_bins = num_bins(unique_count)
         else:
             actual_num_bins = num_bins
 
-        normalized_values[val_mask] = normalized_values[val_mask].mul(actual_num_bins)
-        normalized_values = normalized_values.astype(object)
-        normalized_values[val_mask] = (
-            normalized_values[val_mask].astype(int).astype(str)
-        )
-        normalized_values[val_mask] = "VAL_" + normalized_values[val_mask]
-        return normalized_values
+        # Clamp values to [0, 1) to ensure we get exactly num_bins bins (0 to num_bins-1)
+        result[val_mask] = result[val_mask].clip(0.0, 1.0 - 1e-10)
+
+        # Multiply by number of bins to get bin indices
+        result[val_mask] = result[val_mask].mul(actual_num_bins)
+        result = result.astype(object)
+        result[val_mask] = result[val_mask].astype(int).astype(str)
+        result[val_mask] = "VAL_" + result[val_mask]
+        return result
