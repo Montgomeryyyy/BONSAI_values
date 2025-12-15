@@ -1,27 +1,26 @@
-import uuid
 import warnings
-
-import numpy as np
 import pandas as pd
+import numpy as np
+import uuid
 
 from corebehrt.constants.data import (
     ABSPOS_COL,
-    ADMISSION,
     ADMISSION_CODE,
-    ADMISSION_ID_COL,
     BIRTH_CODE,
     BIRTHDATE_COL,
     CONCEPT_COL,
     DEATH_CODE,
     DEATHDATE_COL,
-    DISCHARGE,
     DISCHARGE_CODE,
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
+    ADMISSION_ID_COL,
+    ADMISSION,
+    DISCHARGE,
 )
-from corebehrt.functional.features.normalize import normalize_segments_series
 from corebehrt.functional.utils.time import get_hours_since_epoch
+from corebehrt.functional.features.normalize import normalize_segments_series
 
 
 def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:
@@ -153,17 +152,29 @@ def create_background(concepts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     # Create a copy to avoid modifying the original DataFrame
     concepts = concepts.copy()
 
+    if len(concepts) == 0:
+        warnings.warn("No concepts found in concepts")
+        return concepts, pd.DataFrame()
+
     # Extract birthdates from DOB rows
     dob_rows = concepts[concepts[CONCEPT_COL] == BIRTH_CODE]
     birthdates = dict(zip(dob_rows[PID_COL], dob_rows[TIMESTAMP_COL]))
     concepts[BIRTHDATE_COL] = concepts[PID_COL].map(birthdates)
-    if concepts[BIRTHDATE_COL].isna().any():
-        raise ValueError("Some patients have no DOB")
+
+    # Exclude patients without birthdate instead of raising an error
+    patients_with_dob = concepts[BIRTHDATE_COL].notna()
+    if not patients_with_dob.all():
+        excluded_patients = concepts[~patients_with_dob][PID_COL].unique()
+        print(
+            f"Warning: Excluding {len(excluded_patients)} patients without birthdate: {excluded_patients}"
+        )
+        concepts = concepts[patients_with_dob].copy()
 
     # Use boolean masking instead of index-based selection for background rows
     bg_mask = concepts[TIMESTAMP_COL].isna()
     concepts.loc[bg_mask, TIMESTAMP_COL] = concepts.loc[bg_mask, BIRTHDATE_COL]
     concepts.loc[bg_mask, CONCEPT_COL] = "BG_" + concepts.loc[bg_mask, CONCEPT_COL]
+    concepts.loc[bg_mask, SEGMENT_COL] = 0
 
     # Use boolean masking for admission/discharge rows
     adm_mask = concepts[CONCEPT_COL].str.contains(ADMISSION_CODE, na=False) | concepts[
@@ -208,7 +219,7 @@ def sort_features(concepts: pd.DataFrame) -> pd.DataFrame:
     return concepts
 
 
-def create_segments(concepts: pd.DataFrame) -> pd.DataFrame:
+def create_adm_segments(concepts: pd.DataFrame) -> pd.DataFrame:
     """
     Assign segments to the concepts DataFrame based on 'ADMISSION_ID', ensuring that
     events are ordered correctly within each 'PID'.

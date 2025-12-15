@@ -11,14 +11,17 @@ from corebehrt.constants.data import (
     TOKENIZED_SCHEMA,
     CONCEPT_COL,
     TIMESTAMP_COL,
+    SEGMENT_COL,
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
 from corebehrt.modules.features.loader import FormattedDataLoader
 from corebehrt.modules.features.tokenizer import EHRTokenizer
-from corebehrt.modules.features.values import ValueCreator
+from corebehrt.modules.features.values import ValueCreatorDiscrete
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
+from corebehrt.modules.setup.config import instantiate_function
+from corebehrt.functional.features.values import get_unique_value_counts
 
 
 def load_tokenize_and_save(
@@ -47,12 +50,39 @@ def load_tokenize_and_save(
     torch.save(set(pids), join(tokenized_path, f"pids_{split}.pt"))  # save pids as ints
 
 
+def make_bin_mapping(bin_mapping_func, features_path):
+    """
+    Makes a bin mapping from a function.
+    """
+
+    values_counts = get_unique_value_counts(features_path, splits=["train", "tuning"])
+    mapping_func = instantiate_function(bin_mapping_func)
+    bin_mapping = {
+        concept: mapping_func(values_counts[concept]) for concept in values_counts
+    }
+    return bin_mapping
+
+
 def create_and_save_features(cfg, splits, logger) -> None:
     """
     Creates features and saves them to disk.
     Returns a list of lists of pids for each batch
     """
     combined_patient_info = pd.DataFrame()
+    logger.info(
+        f"Initialized combined_patient_info as DataFrame with shape: {combined_patient_info.shape}"
+    )
+
+    # Extract bin mapping configuration
+    bin_mapping_func = (
+        cfg.get("features", {})
+        .get("values", {})
+        .get("value_creator_kwargs", {})
+        .get("bin_mapping_func")
+    )
+    bin_mapping = (
+        make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
+    )
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -103,13 +133,39 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
-            concepts = handle_numeric_values(concepts, cfg.get("features"))
+            # Determine value type and segment creation strategy
+            features_cfg = cfg.get("features", {})
+            value_type = features_cfg.get("values", {}).get("value_type", None)
+            logger.info(f"Value type: {value_type}")
+
+            # Use admission IDs for segments only if value_type is not "discrete" or "combined"
+            make_adm_segments = value_type not in [
+                "discrete",
+                "combined",
+            ] and features_cfg.get("use_admission_ids_for_segments", False)
+            logger.info(f"Using admission IDs for segments: {make_adm_segments}")
+
+            # Create row IDs if not using admission-based segments
+            if not make_adm_segments:
+                concepts = create_row_id(concepts)
+
+            # Handle numeric values
+            if value_type is not None:
+                concepts = handle_numeric_values(
+                    concepts, features_cfg, bin_mapping, value_type
+                )
+            else:
+                concepts = concepts.drop(columns=["numeric_value"])
+                logger.warning("No value type found, dropping numeric_value column")
+
+            # Create features
             feature_creator = FeatureCreator()
-            features, patient_info = feature_creator(concepts)
+            features, patient_info = feature_creator(
+                concepts, use_admission_ids_for_segments=make_adm_segments
+            )
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
-
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
                 index=False,
@@ -200,7 +256,10 @@ def handle_aggregations(
 
 
 def handle_numeric_values(
-    concepts: pd.DataFrame, features_cfg: dict = None
+    concepts: pd.DataFrame,
+    features_cfg: dict = None,
+    bin_mapping: dict = None,
+    value_type: str = None,
 ) -> pd.DataFrame:
     """
     Process numeric values in concepts DataFrame based on configuration.
@@ -221,11 +280,21 @@ def handle_numeric_values(
         )
         if separator_regex is not None and not is_valid_regex(separator_regex):
             raise ValueError(f"Invalid regex: {separator_regex}")
-        return ValueCreator.bin_results(
-            concepts,
-            num_bins=num_bins,
-            add_prefix=add_prefix,
-            separator_regex=separator_regex,
-        )
+        if value_type == "discrete":
+            return ValueCreatorDiscrete.bin_results(
+                concepts,
+                num_bins=num_bins,
+                bin_mapping=bin_mapping,
+                add_prefix=add_prefix,
+                separator_regex=separator_regex,
+            )
+        else:
+            raise ValueError(f"Unsupported value type: {value_type}")
 
     return concepts.drop(columns=["numeric_value"])
+
+
+def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
+    """Assign segment numbers to each row within each PID group."""
+    concepts[SEGMENT_COL] = concepts.groupby(PID_COL).cumcount()
+    return concepts

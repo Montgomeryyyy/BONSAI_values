@@ -1,0 +1,15 @@
+logging:
+  level: INFO
+  path: ./outputs/logs
+
+paths:
+  model: "./outputs/pretraining"
+  test_data_dir: "./outputs/testing/held_out/processed_data" 
+  run_name: "evaluate"
+  # checkpoint_epoch: "./outputs/pretraining/checkpoints/checkpoint_epoch.pt"
+
+  embeddings: "./outputs/testing/pretraining/embeddings"
+
+test_batch_size: 128
+
+return_embeddings: True

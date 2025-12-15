@@ -15,6 +15,7 @@ from corebehrt.constants.paths import (
     PREPARE_FINETUNE_CFG,
     EVALUATE_CFG,
     XGBOOST_CFG,
+    EVALUATE_PRETRAIN_CFG,
 )
 from corebehrt.functional.setup.checks import check_categories
 from corebehrt.modules.setup.config import Config, load_config
@@ -329,13 +330,42 @@ class DirectoryPreparer:
             self.cfg.paths.outcome = join(outcomes, self.cfg.paths.get("outcome", ""))
             if exposure := self.cfg.paths.get("exposure", False):
                 self.cfg.paths.exposure = join(outcomes, exposure)
+            if minimum_index_dates := self.cfg.paths.get("minimum_index_dates", False):
+                self.cfg.paths.minimum_index_dates = join(outcomes, minimum_index_dates)
+            if maximum_index_dates := self.cfg.paths.get("maximum_index_dates", False):
+                self.cfg.paths.maximum_index_dates = join(outcomes, maximum_index_dates)
         self.check_file("outcome")
         if self.cfg.paths.get("exposure", False):
             self.check_file("exposure")
+        if self.cfg.paths.get("minimum_index_dates", False):
+            self.check_file("minimum_index_dates")
 
-        # Initial pids is optional.
-        if self.cfg.paths.get("initial_pids", False):
-            self.check_file("initial_pids")
+        # Tokenized must be set. Initial pids is optional.
+        if tokenized := self.cfg.paths.get("tokenized", False):
+            self.check_directory("tokenized")
+            # Print contents of tokenized folder
+            tokenized_path = self.cfg.paths.tokenized
+            if os.path.exists(tokenized_path):
+                print(f"Contents of tokenized folder ({tokenized_path}):")
+                try:
+                    contents = os.listdir(tokenized_path)
+                    if contents:
+                        for item in contents:
+                            item_path = join(tokenized_path, item)
+                            if os.path.isfile(item_path):
+                                size = os.path.getsize(item_path)
+                                print(f"  File: {item} ({size} bytes)")
+                            else:
+                                print(f"  Directory: {item}")
+                    else:
+                        print("  (empty)")
+                except Exception as e:
+                    print(f"  Error reading directory: {e}")
+            else:
+                print(f"Tokenized folder does not exist: {tokenized_path}")
+        if initial_pids := self.cfg.paths.get("initial_pids", False):
+            initial_pids = join(tokenized, initial_pids)
+            self.cfg.paths.initial_pids = initial_pids
 
         self.create_directory("cohort", clear=True)
         self.write_config("cohort", name=COHORT_CFG)
@@ -418,7 +448,7 @@ class DirectoryPreparer:
 
     def setup_evaluate(self, finetune_cfg=None) -> None:
         """
-        Validates path config and sets up directories for finetune.
+        Validates path config and sets up directories for evaluate.
         """
         # Setup logging
         self.setup_logging("evaluate")
@@ -433,6 +463,18 @@ class DirectoryPreparer:
             self.write_config("predictions", source="model", name=finetune_cfg)
         else:
             self.write_config("predictions", source="model", name=FINETUNE_CFG)
+
+    def setup_evaluate_pretrain(self) -> None:
+        """
+        Validates path config and sets up directories for evaluate pretrain.
+        """
+        # Setup logging
+        self.setup_logging("evaluate pretrain")
+
+        # Validate and create directories
+        self.check_directory("test_data_dir")
+        self.create_directory("embeddings", clear=True)
+        self.write_config("embeddings", name=EVALUATE_PRETRAIN_CFG)
 
     #
     # Directory naming generators

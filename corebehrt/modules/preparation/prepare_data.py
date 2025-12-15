@@ -114,20 +114,21 @@ class DatasetPreparer:
             + self.cfg.outcome.n_hours_censoring
         )
         self._validate_censoring(data.patients, censor_dates, logger)
+        censor_dates_dict = {int(k): v for k, v in censor_dates.items()}
         if "concept_pattern_hours_delay" in self.cfg:
             concept_id_to_delay = get_concept_id_to_delay(
                 self.cfg.concept_pattern_hours_delay, self.vocab
             )
             data.patients = data.process_in_parallel(
                 censor_patient_with_delays,
-                censor_dates=censor_dates,
+                censor_dates=censor_dates_dict,
                 predict_token_id=self.predict_token,
                 concept_id_to_delay=concept_id_to_delay,
             )
         else:
             data.patients = data.process_in_parallel(
                 censor_patient,
-                censor_dates=censor_dates,
+                censor_dates=censor_dates_dict,
                 predict_token_id=self.predict_token,
             )
 
@@ -173,7 +174,9 @@ class DatasetPreparer:
 
         return data
 
-    def prepare_pretrain_data(self, save_data=False) -> Tuple[PatientDataset, dict]:
+    def prepare_pretrain_data(
+        self, save_data=False, mode="train"
+    ) -> Tuple[PatientDataset, dict]:
         data_cfg = self.cfg.data
         paths_cfg = self.cfg.paths
 
@@ -181,7 +184,7 @@ class DatasetPreparer:
         # Load tokenized data + vocab
         loader = ShardLoader(
             data_dir=paths_cfg.tokenized,
-            splits=["features_train"],
+            splits=[f"features_{mode}"],
             patient_info_path=None,
         )
         patient_list = []

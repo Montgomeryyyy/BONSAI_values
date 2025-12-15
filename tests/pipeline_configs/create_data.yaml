@@ -8,6 +8,7 @@ paths:
   features: ./tests/data/features
   
 features:
+  use_admission_ids_for_segments: true
   values:
     value_creator_kwargs:
       num_bins: 100

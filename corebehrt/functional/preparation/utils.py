@@ -10,6 +10,9 @@ import re
 
 def get_background_length(patients: List[PatientData], vocabulary) -> int:
     """Get the length of the background sentence, first SEP token included."""
+    if not patients:
+        raise ValueError("Cannot calculate background length: no patients available")
+
     background_tokens = get_background_tokens(vocabulary)
     example_concepts = patients[0].concepts
     background_length = len(set(example_concepts) & background_tokens)

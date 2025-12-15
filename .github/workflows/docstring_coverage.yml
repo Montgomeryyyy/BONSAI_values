@@ -39,8 +39,8 @@ jobs:
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
-          gistID: b02ecb317ea24a8ced5e72ae96e1c0c3
-          filename: docstr-coverage.json
+          gistID: 966924cdc44c3df70c88f8b04a9758c5
+          filename: covbadge.json
           label: Docstr Coverage
           message: "${{ steps.extract.outputs.doccov || '0' }}%"
           valColorRange: "${{ steps.extract.outputs.doccov || '0' }}"

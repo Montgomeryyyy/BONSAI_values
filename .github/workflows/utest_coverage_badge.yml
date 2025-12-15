@@ -46,12 +46,29 @@ jobs:
             echo "total=0" >> $GITHUB_OUTPUT
           fi
 
+      - name: Debug curl to gist from Actions
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GIST_SECRET }}
+        run: |
+          echo "Testing access to gist from within GitHub Actions..."
+          if [ -z "$TOKEN" ]; then
+            echo "GIST_SECRET is NOT set or is empty in this repo/context"
+            exit 1
+          fi
+
+          # This will mask the token in logs, but will still show the HTTP status line
+          curl -i \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/gists/966924cdc44c3df70c88f8b04a9758c5 \
+            | head -n 15
+
       - name: Create Dynamic Coverage Badge
         if: always()  # Always try to create badge
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
-          gistID: b02ecb317ea24a8ced5e72ae96e1c0c3
+          gistID: 966924cdc44c3df70c88f8b04a9758c5
           filename: covbadge.json
           label: Test Coverage
           message: "${{ steps.extract.outputs.total || '0' }}%"

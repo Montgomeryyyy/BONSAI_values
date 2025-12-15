@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime
-
+import io
+import sys
 import pandas as pd
 from pandas import NaT
 
@@ -95,9 +96,12 @@ class TestFeatureCreator(unittest.TestCase):
         self.assertEqual(len(result["segment"]), len(self.expected_segments))
 
     def test_create_background(self):
-        result, _ = self.feature_creator(self.concepts)
+        result, _ = self.feature_creator(
+            self.concepts, use_admission_ids_for_segments=True
+        )
         self.assertTrue(any(result[CONCEPT_COL].str.startswith("BG_GENDER")))
         # Compare the segment values
+
         self.assertTrue(
             (result["segment"].values == self.expected_segments.values).all()
         )
@@ -109,9 +113,20 @@ class TestFeatureCreator(unittest.TestCase):
             concepts_wo_dob[CONCEPT_COL] == "DOB"
         )
         concepts_wo_dob = concepts_wo_dob[~patient_1_dob_mask].copy()
-        with self.assertRaises(ValueError) as context:
-            self.feature_creator(concepts_wo_dob)
-        self.assertIn("Some patients have no DOB", str(context.exception))
+
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        try:
+            result, _ = self.feature_creator(concepts_wo_dob)
+            # Check that patient 1 is excluded from results
+            self.assertNotIn(1, result[PID_COL].unique())
+            # Check that warning message is printed
+            output = captured_output.getvalue()
+            self.assertIn("Warning: Excluding", output)
+            self.assertIn("patients without birthdate", output)
+        finally:
+            sys.stdout = sys.__stdout__
 
     def test_create_abspos(self):
         result, _ = self.feature_creator(self.concepts)

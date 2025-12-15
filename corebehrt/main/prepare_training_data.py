@@ -26,24 +26,30 @@ def main_prepare_data(config_path):
 
     if cfg.data.type == "pretrain":
         # Setup directories
+        split_data = cfg.data.get("split_data", True)
         DirectoryPreparer(cfg).setup_prepare_pretrain()
         logger = logging.getLogger("prepare pretrain data")
         logger.info("Preparing pretrain data")
         # Prepare data
-        data = DatasetPreparer(cfg).prepare_pretrain_data(save_data=False)
+        mode = cfg.data.get("mode", "train")
+        data = DatasetPreparer(cfg).prepare_pretrain_data(mode=mode)
 
-        # Splitting data
-        if cfg.data.get("predefined_splits", False):
-            splits_path = get_splits_path(cfg.paths)
-            train_data, val_data = load_train_val_split(data, splits_path)
+        if split_data:
+            # Splitting data
+            logger.info("Splitting data")
+            if cfg.data.get("predefined_splits", False):
+                splits_path = get_splits_path(cfg.paths)
+                train_data, val_data = load_train_val_split(data, splits_path)
+            else:
+                train_data, val_data = split_pids_into_train_val(
+                    data, cfg.data.get("val_ratio", 0.2)
+                )
+            save_pids_splits(train_data, val_data, cfg.paths.prepared_data)
+            train_data.save(cfg.paths.prepared_data, suffix="_train")
+            val_data.save(cfg.paths.prepared_data, suffix="_val")
         else:
-            train_data, val_data = split_pids_into_train_val(
-                data, cfg.data.get("val_ratio", 0.2)
-            )
-        save_pids_splits(train_data, val_data, cfg.paths.prepared_data)
-        train_data.save(cfg.paths.prepared_data, suffix="_train")
-        val_data.save(cfg.paths.prepared_data, suffix="_val")
-
+            logger.info("Not splitting data")
+            data.save(cfg.paths.prepared_data)
     elif cfg.data.type == "finetune":
         # Setup directories
         DirectoryPreparer(cfg).setup_prepare_finetune()

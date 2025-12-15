@@ -28,19 +28,36 @@ class IndexDateHandler:
         """Get index timestamps for exposed patients."""
         hours_delta = pd.Timedelta(hours=n_hours_from_exposure)
         exposures = filter_table_by_pids(exposures, pids)
-        # Set PID as index and get timestamp series
         result = exposures.set_index(PID_COL)[TIMESTAMP_COL] + hours_delta
-        result.index.name = PID_COL  # Ensure index name is set to PID_COL
+        result.index.name = PID_COL
         return result
+
+    @staticmethod
+    def _ensure_series_format(data: pd.Series | pd.DataFrame) -> pd.Series:
+        """Ensure data is in Series format with PID as index."""
+        if isinstance(data, pd.DataFrame):
+            return data.set_index(PID_COL)[TIMESTAMP_COL]
+        return data
 
     @staticmethod
     def draw_index_dates_for_unexposed(
         data_pids: List[str],
         censoring_timestamps: pd.Series,
     ) -> pd.Series:
-        """Draw censor dates for patients not in censor_timestamps."""
+        """
+        Draw censor dates for patients not in censoring_timestamps.
+        Includes validation against minimum/maximum index dates.
+        """
         np.random.seed(42)
+
+        # Ensure censoring_timestamps is a Series
+        censoring_timestamps = IndexDateHandler._ensure_series_format(
+            censoring_timestamps
+        )
+
         missing_pids = set(data_pids) - set(censoring_timestamps.index)
+
+        # Draw random timestamps for missing patients
         random_abspos = np.random.choice(
             censoring_timestamps.values, size=len(missing_pids)
         )
@@ -48,9 +65,8 @@ class IndexDateHandler:
             random_abspos, index=pd.Index(list(missing_pids), name=PID_COL)
         )
         result = pd.concat([censoring_timestamps, new_entries])
-        result.index.name = (
-            PID_COL  # Ensure the final concatenated series has PID_COL as index name
-        )
+        result.index.name = PID_COL
+
         return result
 
     @classmethod
@@ -58,35 +74,57 @@ class IndexDateHandler:
         cls,
         patients_info: pd.DataFrame,
         index_date_mode: str,
-        *,  # force keyword arguments,
+        *,  # force keyword arguments
         absolute_timestamp: Optional[dict] = None,
         n_hours_from_exposure: Optional[int] = None,
         exposures: Optional[pd.DataFrame] = None,
+        n_hours_from_minimum_index_date: Optional[int] = None,
+        n_hours_from_maximum_index_date: Optional[int] = None,
+        secondary_censoring_timestamps: Optional[pd.DataFrame] = None,
+        n_hours_from_secondary_censoring_timestamps: Optional[int] = None,
     ) -> pd.Series:
-        """Determine index dates based on mode.
+        """
+        Determine index dates based on mode.
+
         Args:
-            patients_info: pd.DataFrame with patients info
-            index_date_mode: str, "absolute" or "relative"
-            absolute_timestamp: dict with year, month, day (required if index_date_mode == "absolute")
-            n_hours_from_exposure: int (required if index_date_mode == "relative")
-            exposures: pd.DataFrame (required if index_date_mode == "relative")
+            patients_info: DataFrame with patients info
+            index_date_mode: "absolute" or "relative"
+            absolute_timestamp: dict with year, month, day (required if mode == "absolute")
+            n_hours_from_exposure: int (required if mode == "relative")
+            exposures: DataFrame (required if mode == "relative")
+
+        Returns:
+            pd.Series: Index dates for all patients
         """
         pids = set(patients_info[PID_COL].unique())
 
-        result = None
         if index_date_mode == "absolute":
             absolute_timestamp = datetime(**absolute_timestamp)
             result = cls.create_timestamp_series(pids, absolute_timestamp)
         elif index_date_mode == "relative":
-            n_hours = n_hours_from_exposure or 0
-            exposed_timestamps = cls.get_index_timestamps_for_exposed(
-                pids, n_hours, exposures
+            result = cls._handle_relative_mode(
+                pids,
+                n_hours_from_exposure,
+                exposures,
             )
-            result = cls.draw_index_dates_for_unexposed(pids, exposed_timestamps)
         else:
             raise ValueError(f"Unsupported index date mode: {index_date_mode}")
 
-        # Ensure the series has both index name and series name
         result.index.name = PID_COL
         result.name = TIMESTAMP_COL
         return result
+
+    @classmethod
+    def _handle_relative_mode(
+        cls,
+        pids: Set[str],
+        n_hours_from_exposure: Optional[int],
+        exposures: Optional[pd.DataFrame],
+    ) -> pd.Series:
+        """Handle relative mode index date calculation."""
+        n_hours = n_hours_from_exposure or 0
+        exposed_timestamps = cls.get_index_timestamps_for_exposed(
+            pids, n_hours, exposures
+        )
+
+        return cls.draw_index_dates_for_unexposed(pids, exposed_timestamps)

@@ -10,6 +10,7 @@ This guide walks through the steps required to **finetune a model for binary cla
 6. [**Prepare Training Data (finetune)**](#6-prepare-training-data-finetune)
 7. [**Finetune Model**](#7-finetune-model)
 8. [**Out-of-Time Evaluation (Temporal Validation)**](#8-out-of-time-evaluation-temporal-validation)
+9. [**Values**](#9-values)
 
 ---
 
@@ -320,3 +321,34 @@ Step                     | Script           | Key Configs | Output Files
 ---
   
   📖 **A good starting point are the examples in the `configs` folder.**
+
+
+## 9. Values
+There are three forms for support for numerical input: discretisation, separate_layering, and combined. 
+
+### Discretization
+
+Numerical values are converted into discrete tokens by binning:
+
+- **Binning Process**: Continuous numeric values are divided into bins, with each bin represented as a discrete token in the vocabulary
+- **Training**: These value tokens are included in the masked language modeling (MLM) pretraining task, using cross-entropy loss alongside concept tokens
+- **Configuration Options**:
+  - **Default binning**: Specify a uniform number of bins for all numeric values (default: 100 bins)
+  - **Custom binning**: Provide a `bin_mapping` function to apply concept-specific binning strategies (e.g., different numbers of bins per lab test). This overrides `num_bins`
+  - **Prefix support**: Optionally add concept-specific prefixes to value codes (e.g., `LAB/VAL_45` vs `VITALS/VAL_120`)
+
+### Configuration Example
+
+```yaml
+features:
+  values:
+    value_type: "discrete"
+    value_creator_kwargs:
+      num_bins: 100  # Default number of bins
+      bin_mapping_func:  # Optional: custom binning function
+        _target_: corebehrt.functional.features.values.power_bin_distance_mean
+      add_prefix: true  # Optional: add concept prefix to value codes
+      separator_regex: r"^([^/]+)/"  # Extract prefix from concept name
+```
+
+This approach allows the model to learn representations of numerical measurements while maintaining compatibility with the discrete token-based architecture. 
