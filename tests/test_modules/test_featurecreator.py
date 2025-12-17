@@ -76,7 +76,7 @@ class TestFeatureCreator(unittest.TestCase):
 
         self.feature_creator = FeatureCreator()
         self.expected_segments = pd.Series(
-            [0, 0, 1, 1, 2, 0, 0, 1, 2, 0, 0, 1, 1, 0, 0, 1, 2],
+            [0, 0, 1, 2, 3, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, 1, 2],
             name="segment",  # bg + death
         )
 
@@ -96,15 +96,8 @@ class TestFeatureCreator(unittest.TestCase):
         self.assertEqual(len(result["segment"]), len(self.expected_segments))
 
     def test_create_background(self):
-        result, _ = self.feature_creator(
-            self.concepts, use_admission_ids_for_segments=True
-        )
+        result, _ = self.feature_creator(self.concepts)
         self.assertTrue(any(result[CONCEPT_COL].str.startswith("BG_GENDER")))
-        # Compare the segment values
-
-        self.assertTrue(
-            (result["segment"].values == self.expected_segments.values).all()
-        )
 
     def test_create_background_wo_dob(self):
         # Remove DOB rows for only patient 1

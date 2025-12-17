@@ -57,6 +57,7 @@ def _remove_last_sep_token(patient: PatientData) -> PatientData:
         patient.abspos = patient.abspos[:-1]
         patient.segments = patient.segments[:-1]
         patient.ages = patient.ages[:-1]
+        patient.values = patient.values[:-1]
     return patient
 
 
@@ -140,6 +141,7 @@ def censor_patient_with_delays(
     patient.ages = [a for i, a in enumerate(patient.ages) if keep_mask[i]]
     patient.values = [v for i, v in enumerate(patient.values) if keep_mask[i]]
 
+    patient = _remove_last_sep_token(patient)
     patient = _append_predict_token(patient, predict_token_id, base_censor_date)
 
     return patient

@@ -78,10 +78,6 @@ class IndexDateHandler:
         absolute_timestamp: Optional[dict] = None,
         n_hours_from_exposure: Optional[int] = None,
         exposures: Optional[pd.DataFrame] = None,
-        n_hours_from_minimum_index_date: Optional[int] = None,
-        n_hours_from_maximum_index_date: Optional[int] = None,
-        secondary_censoring_timestamps: Optional[pd.DataFrame] = None,
-        n_hours_from_secondary_censoring_timestamps: Optional[int] = None,
     ) -> pd.Series:
         """
         Determine index dates based on mode.

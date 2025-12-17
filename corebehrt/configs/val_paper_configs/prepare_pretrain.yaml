@@ -7,8 +7,4 @@ data:
   predefined_splits: false 
   val_ratio: 0.2 
   truncation_len: 1024
-<<<<<<< HEAD
   min_len: 3
-=======
-  min_len: 3
->>>>>>> c00809f6 (added configs)
