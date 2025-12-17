@@ -100,7 +100,9 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
         else:
             bin_mapping = None
-    logger.info("Value type: {value_type}")
+    logger.info(f"Value type: {value_type}")
+    logger.info(f"Binning values: {value_args.get('bin_values', False)}")
+    logger.info(f"Bin mapping: {bin_mapping}")
 
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")

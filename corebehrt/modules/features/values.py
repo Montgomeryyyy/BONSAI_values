@@ -252,7 +252,6 @@ class ValueCreator:
             DataFrame with binned values (as integers) in VALUE_COL
         """
         if bin_values:
-            logger.info("Binning values")
             if bin_mapping is not None:
                 concepts[VALUE_COL] = (
                     concepts.groupby(CONCEPT_COL)
@@ -272,8 +271,6 @@ class ValueCreator:
                 concepts[VALUE_COL] = ValueCreator.bin(
                     concepts[VALUE_COL], num_bins=num_bins
                 )
-        else:
-            logger.info("No binning applied")
         return concepts
 
     @staticmethod
