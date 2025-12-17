@@ -1,6 +1,6 @@
 import pandas as pd
 
-from corebehrt.constants.data import DEFAULT_VOCABULARY, CONCEPT_COL, VALUE_COL
+from corebehrt.constants.data import DEFAULT_VOCABULARY, CONCEPT_COL
 from corebehrt.functional.features.tokenize import (
     add_special_tokens_partition,
     limit_concept_length_partition,

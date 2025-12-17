@@ -3,7 +3,7 @@ logging:
   path: ./outputs/logs
 
 paths:
-  data: ./tests/data/raw #./example_data/lab_correlated_MEDS_data
+  data: ./example_data/correlated_MEDS_data # ./example_data/lab_correlated_MEDS_data
   tokenized: ./outputs/tokenized
   features: ./outputs/features
   # optional
@@ -14,13 +14,13 @@ paths:
 
 features:
   # exclude_regex: ^(?:LAB).* # example regex to exclude all features that start with 'LAB'
-  # values:
-  #   value_type: "discrete"
-  #   value_creator_kwargs:
-  #     bin_values: true
-  #     # num_bins: 100
-  #     bin_mapping_func: 
-  #       _target_: corebehrt.functional.features.values.power_bin_distance_mean
+  values:
+    value_type: "discrete"
+    value_creator_kwargs:
+      bin_values: true
+      # num_bins: 100
+      bin_mapping_func: 
+        _target_: corebehrt.functional.features.values.power_bin_distance_mean
       # add_prefix: true # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
   agg_kwargs:

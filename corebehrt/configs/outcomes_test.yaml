@@ -3,35 +3,34 @@ logging:
   path: ./outputs/logs
 
 paths:
-  data: ./tests/data/raw
-  features: ./outputs/features
-  outcomes: ./outputs//outcomes
-  splits: [train, tuning, held_out]
+  data: ./example_data/correlated_MEDS_data
+  splits: [ train, tuning, held_out ] # Optional, defaults to take all splits in data directory
+  outcomes: ./outputs/outcomes/
+  features: ./outputs/features/
 
 outcomes:
   TEST_OUTCOME:
-    type: [code]
-    match: [['D0', 'D1']]
-    exclude: ['D437']
+    type: [ code ]
+    match: [ [ 'DE11' ] ] # Type 1 diabetes, related to "M/IN01", "M/IN02", "LAB/GL" in correlated data
+    exclude: [ 'D437' ]
     match_how: startswith
     case_sensitive: true
-
   TEST_CENSOR:
-    type: [code]
-    match: [['M112']]
+    type: [ code ]
+    match: [ [ 'M112' ] ]
     match_how: startswith
     case_sensitive: false
-
   TEST_COMBINED:
     combinations:
       primary:
-        type: [code]
-        match: [['M8']]
+        type: [ code ]
+        match: [ [ 'M8' ] ]
         match_how: startswith
       secondary:
-        type: [code]
-        match: [['LAB', 'D5']]
+        type: [ code ]
+        match: [ [ 'LAB', 'D5' ] ]
         match_how: startswith
+      # takes occurence of primary and looks for secondary within +-1000 hours
       window_hours_min: -100
       window_hours_max: 100
-      timestamp_source: primary
+      timestamp_source: "primary" # Optional, falls back to primary if not specified
