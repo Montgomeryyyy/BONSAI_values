@@ -3,7 +3,7 @@ logging:
   path: ./outputs/logs
 
 paths:
-  data: ./example_data/lab_correlated_MEDS_data
+  data: ./example_data/correlated_MEDS_data
   splits: [ train, tuning, held_out ] # Optional, defaults to take all splits in data directory
   outcomes: ./outputs/outcomes/
   features: ./outputs/features/
