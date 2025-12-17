@@ -3,7 +3,7 @@ logging:
   path: ./outputs/logs
 
 paths:
-  data: ./example_data/LAB_correlated_MEDS_data # ./example_data/lab_correlated_MEDS_data
+  data: ./example_data/lab_correlated_MEDS_data # ./example_data/lab_correlated_MEDS_data
   tokenized: ./outputs/tokenized
   features: ./outputs/features
   # optional
