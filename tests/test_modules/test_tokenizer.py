@@ -11,6 +11,7 @@ from corebehrt.constants.data import (
     PID_COL,
     CONCEPT_COL,
     MASK_TOKEN,
+    VAL_TOKEN,
 )
 
 
@@ -52,8 +53,9 @@ class TestEHRTokenizer(unittest.TestCase):
             CLS_TOKEN: 1,
             SEP_TOKEN: 2,
             UNKNOWN_TOKEN: 3,
-            "C1": 4,
-            "C2": 5,
+            VAL_TOKEN: 4,
+            "C1": 5,
+            "C2": 6,
         }
         tokenizer = EHRTokenizer(vocabulary=existing_vocab)
         result = tokenizer(self.df)
@@ -255,7 +257,15 @@ class TestEHRTokenizer(unittest.TestCase):
         vocab_codes = {
             k
             for k in tokenizer.vocabulary.keys()
-            if k not in [PAD_TOKEN, CLS_TOKEN, SEP_TOKEN, UNKNOWN_TOKEN, MASK_TOKEN]
+            if k
+            not in [
+                PAD_TOKEN,
+                CLS_TOKEN,
+                SEP_TOKEN,
+                UNKNOWN_TOKEN,
+                MASK_TOKEN,
+                VAL_TOKEN,
+            ]
         }
 
         # All original codes should be in vocabulary

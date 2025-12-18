@@ -18,6 +18,7 @@ from corebehrt.constants.data import (
     DEFAULT_VOCABULARY,
     PAD_TOKEN,
     IGNORE_LOSS_INDEX,
+    VALUE_FEAT,
 )
 
 
@@ -46,6 +47,7 @@ class TestCorebehrtModels(unittest.TestCase):
             SEGMENT_FEAT: torch.zeros((B, L), dtype=torch.long),
             AGE_FEAT: torch.zeros((B, L)),
             ABSPOS_FEAT: torch.zeros((B, L)),
+            VALUE_FEAT: torch.zeros((B, L)),
         }
         # mask for fine-tuning
         self.batch[ATTENTION_MASK] = (self.batch[CONCEPT_FEAT] != 0).long()

@@ -1,5 +1,6 @@
 import random
 import unittest
+import numpy as np
 
 from corebehrt.modules.preparation.dataset import PatientData, PatientDataset
 from corebehrt.functional.preparation.truncate import (
@@ -50,12 +51,14 @@ class TestTruncationFunctions(unittest.TestCase):
         p1_abspos = [i for i in range(len(p1_concepts))]
         p1_segments = [0] * len(p1_concepts)
         p1_ages = [30 + 0.1 * i for i in range(len(p1_concepts))]
+        p1_values = [0.0] * len(p1_concepts)
         self.patient1 = PatientData(
             pid=1,
             concepts=p1_concepts,
             abspos=p1_abspos,
             segments=p1_segments,
             ages=p1_ages,
+            values=p1_values,
         )
 
         # patient 2 (large but slightly different distribution)
@@ -74,6 +77,7 @@ class TestTruncationFunctions(unittest.TestCase):
             abspos=p2_abspos,
             segments=[0] * len(p2_concepts),
             ages=[40.0] * len(p2_concepts),
+            values=[0.0] * len(p2_concepts),
         )
 
         # patient 3 (shorter)
@@ -90,6 +94,7 @@ class TestTruncationFunctions(unittest.TestCase):
             abspos=p3_abspos,
             segments=[0] * len(p3_concepts),
             ages=[50.0] * len(p3_concepts),
+            values=[0.0] * len(p3_concepts),
         )
 
         # patient 4 (mixed LAB/VAL tokens)
@@ -110,6 +115,7 @@ class TestTruncationFunctions(unittest.TestCase):
             abspos=p4_abspos,
             segments=[0] * len(p4_concepts),
             ages=[60.0] * len(p4_concepts),
+            values=[np.nan] * len(p4_concepts),
         )
 
         # patient 5 (unit testing)
@@ -124,6 +130,7 @@ class TestTruncationFunctions(unittest.TestCase):
             abspos=p5_abspos,
             segments=[0] * len(p5_concepts),
             ages=[70.0] * len(p5_concepts),
+            values=[np.nan] * len(p5_concepts),
         )
 
         # -----------------------------------------------------------------
@@ -176,6 +183,47 @@ class TestTruncationFunctions(unittest.TestCase):
         )
         self.assertEqual(
             truncated.concepts[2], self.sep_token, "Missing [SEP] at index 2"
+        )
+
+    # ---------------------------------------------------------------------
+    # Test 3b: Value alignment remains consistent after truncation
+    # ---------------------------------------------------------------------
+    def test_truncate_patient_preserves_value_alignment(self):
+        concepts = [
+            self.cls_token,
+            self.gender_token,
+            self.sep_token,
+            3,
+            4,
+            5,
+            6,
+        ]
+        values = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]
+        patient = PatientData(
+            pid=99,
+            concepts=concepts,
+            abspos=list(range(len(concepts))),
+            segments=[0] * len(concepts),
+            ages=[30.0] * len(concepts),
+            values=values,
+        )
+
+        truncated = truncate_patient(
+            patient, background_length=3, max_len=5, sep_token=self.sep_token
+        )
+
+        self.assertEqual(len(truncated.concepts), 5)
+        self.assertEqual(len(truncated.values), 5)
+        # Standard truncation keeps background then tail tokens
+        expected_concepts = concepts[:3] + concepts[-2:]
+        expected_values = values[:3] + values[-2:]
+        self.assertListEqual(
+            truncated.concepts,
+            expected_concepts,
+            "Concepts out of sync after truncation",
+        )
+        self.assertListEqual(
+            truncated.values, expected_values, "Values out of sync with concepts"
         )
 
     # ---------------------------------------------------------------------
@@ -272,6 +320,7 @@ class TestHelperFunctions(unittest.TestCase):
             abspos=[0, 0, 1, 2, 3, 4, 4, 5, 6, 7],  # positions
             segments=[0] * 10,
             ages=[10] * 10,
+            values=[np.nan] * 10,
             outcome=None,
         )
 
@@ -282,6 +331,7 @@ class TestHelperFunctions(unittest.TestCase):
             abspos=[0, 0, 0, 1, 1, 1, 2],
             segments=[0] * 7,
             ages=[20] * 7,
+            values=[np.nan] * 7,
             outcome=None,
         )
 
@@ -373,6 +423,7 @@ class TestHelperFunctions(unittest.TestCase):
             abspos=self.patient2.abspos[:],
             segments=self.patient2.segments[:],
             ages=self.patient2.ages[:],
+            values=self.patient2.values[:],
             outcome=self.patient2.outcome,
         )
         # Force positions of concept=6 at idx=1 and idx=4 to be same

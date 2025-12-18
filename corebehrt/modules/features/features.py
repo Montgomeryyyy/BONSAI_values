@@ -6,7 +6,6 @@ from corebehrt.functional.features.creators import (
     create_age_in_years,
     create_background,
     sort_features,
-    create_adm_segments,
 )
 from corebehrt.functional.features.exclude import exclude_event_nans
 from corebehrt.functional.setup.checks import check_features_columns
@@ -35,8 +34,6 @@ class FeatureCreator:
         )  # ! do not touch this: including additional columns here might cause loss of events.
         features = sort_features(features)
 
-        if use_admission_ids_for_segments:
-            features = create_adm_segments(features)
         features = features.drop(columns=["time", "birthdate"])
         features[PID_COL] = features[PID_COL].astype(int)
 

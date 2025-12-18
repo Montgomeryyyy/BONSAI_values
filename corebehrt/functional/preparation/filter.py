@@ -57,6 +57,7 @@ def _remove_last_sep_token(patient: PatientData) -> PatientData:
         patient.abspos = patient.abspos[:-1]
         patient.segments = patient.segments[:-1]
         patient.ages = patient.ages[:-1]
+        patient.values = patient.values[:-1]
     return patient
 
 
@@ -67,7 +68,7 @@ def censor_patient(
     Censors a patient's data by truncating all attributes at the censor date,
     then appends a CLS token with the censoring information.
 
-    The function shortens the concept, abspos, segments, and ages lists of a PatientData object so that only entries occurring before or at the patient's censor date are retained, then adds a predict token at the end.
+    The function shortens the concept, abspos, segments, ages, and values lists of a PatientData object so that only entries occurring before or at the patient's censor date are retained, then adds a predict token at the end.
 
     Args:
         patient: The PatientData object to be censored.
@@ -86,6 +87,7 @@ def censor_patient(
     patient.abspos = patient.abspos[:idx]
     patient.segments = patient.segments[:idx]
     patient.ages = patient.ages[:idx]
+    patient.values = patient.values[:idx]
 
     patient = _remove_last_sep_token(patient)
     patient = _append_predict_token(patient, predict_token_id, censor_date)
@@ -137,7 +139,9 @@ def censor_patient_with_delays(
     patient.abspos = [a for i, a in enumerate(patient.abspos) if keep_mask[i]]
     patient.segments = [s for i, s in enumerate(patient.segments) if keep_mask[i]]
     patient.ages = [a for i, a in enumerate(patient.ages) if keep_mask[i]]
+    patient.values = [v for i, v in enumerate(patient.values) if keep_mask[i]]
 
+    patient = _remove_last_sep_token(patient)
     patient = _append_predict_token(patient, predict_token_id, base_censor_date)
 
     return patient
@@ -149,6 +153,7 @@ def _append_predict_token(
     """
     Appends a predict token to the patient's data.
     """
+
     patient.concepts.append(predict_token_id)
     patient.abspos.append(float(censor_date))
     patient.segments.append(
@@ -156,6 +161,7 @@ def _append_predict_token(
     )  # Use 0 as default segment if segments list is empty
     age_in_years = float((censor_date - patient.abspos[0]) / (365.25 * 24))
     patient.ages.append(age_in_years)
+    patient.values.append(float("nan"))  # Predict token has no associated value
     return patient
 
 

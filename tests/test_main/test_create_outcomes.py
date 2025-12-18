@@ -26,7 +26,7 @@ class TestCreateOutcomes(TestMainScript):
                 "outcomes": {
                     "TEST_OUTCOME": {
                         "type": ["code"],
-                        "match": [["D01"]],
+                        "match": [["D0", "D1"]],
                         "exclude": ["D437"],
                         "match_how": "startswith",
                         "case_sensitive": True,

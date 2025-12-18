@@ -333,7 +333,17 @@ class EHRTrainer:
 
         self.log(f"Epoch {epoch} train loss: {avg_train_loss}")
         self.log(f"Epoch {epoch} val loss: {val_loss}")
-        self.log(f"Epoch {epoch} metrics: {val_metrics}\n")
+        self.log(f"Epoch {epoch} metrics: {val_metrics}")
+
+        # Log value loss weight if it's learnable
+        if hasattr(self.model, "value_loss_weight") and isinstance(
+            self.model.value_loss_weight, torch.nn.Parameter
+        ):
+            current_weight = self.model.value_loss_weight.item()
+            self.log(f"Epoch {epoch} value_loss_weight: {current_weight:.6f}")
+            self.run_log(name="value_loss_weight", value=current_weight, step=epoch)
+
+        self.log("")  # Empty line for readability
 
     def _should_stop_early(
         self,
@@ -571,3 +581,18 @@ class EHRTrainer:
         if self.args.get("reset_patience_after_unfreeze", True):
             self.early_stopping_counter = 0
             self.log("Reset early stopping counter after unfreezing")
+
+    def get_value_loss_weight(self) -> float:
+        """
+        Get the current value loss weight.
+
+        Returns:
+            float: The current value loss weight value, or None if not available
+        """
+        if hasattr(self.model, "value_loss_weight"):
+            if isinstance(self.model.value_loss_weight, torch.nn.Parameter):
+                return self.model.value_loss_weight.item()
+            else:
+                return self.model.value_loss_weight
+        else:
+            return None

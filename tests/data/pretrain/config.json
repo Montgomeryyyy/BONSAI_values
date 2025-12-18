@@ -1,5 +1,4 @@
 {
-  "_attn_implementation_autoset": true,
   "abspos_scale": 1e-05,
   "abspos_shift": -90000,
   "age_scale": 0.01,
@@ -24,6 +23,7 @@
   "initializer_range": 0.02,
   "intermediate_size": 64,
   "is_causal": false,
+  "learnable_value_weight": true,
   "local_attention": 128,
   "local_rope_theta": 10000.0,
   "max_position_embeddings": 512,
@@ -35,12 +35,13 @@
   "num_attention_heads": 3,
   "num_hidden_layers": 3,
   "pad_token_id": 0,
-  "reference_compile": null,
   "repad_logits_with_grad": false,
   "sep_token_id": 2,
   "sparse_pred_ignore_index": -100,
   "sparse_prediction": true,
-  "transformers_version": "4.48.3",
+  "transformers_version": "4.57.0",
   "type_vocab_size": 1024,
-  "vocab_size": 2027
+  "value_embedding_mode": "film",
+  "value_loss_weight": 1.0,
+  "vocab_size": 2008
 }

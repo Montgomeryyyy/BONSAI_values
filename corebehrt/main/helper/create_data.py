@@ -1,6 +1,7 @@
 import os
 from os.path import join
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import torch
@@ -12,16 +13,28 @@ from corebehrt.constants.data import (
     CONCEPT_COL,
     TIMESTAMP_COL,
     SEGMENT_COL,
+    VALUE_COL,
 )
 from corebehrt.functional.features.exclude import exclude_incorrect_event_ages
 from corebehrt.modules.features.features import FeatureCreator
 from corebehrt.modules.features.loader import FormattedDataLoader
 from corebehrt.modules.features.tokenizer import EHRTokenizer
-from corebehrt.modules.features.values import ValueCreatorDiscrete
+from corebehrt.modules.features.values import ValueCreator
 from corebehrt.functional.preparation.utils import is_valid_regex
 from corebehrt.functional.preparation.filter import filter_rows_by_regex
 from corebehrt.modules.setup.config import instantiate_function
 from corebehrt.functional.features.values import get_unique_value_counts
+
+
+def convert_numeric_strings(x):
+    if isinstance(x, str):
+        try:
+            # Try to convert to float, if successful return the float
+            return float(x)
+        except ValueError:
+            # If conversion fails, keep as string
+            return x
+    return x
 
 
 def load_tokenize_and_save(
@@ -39,7 +52,6 @@ def load_tokenize_and_save(
         shard_path = join(features_path, split, shard)
         shard_n = shard.split(".")[0]
         df = pd.read_parquet(shard_path).set_index(PID_COL)
-
         df = tokenizer(df).reset_index()
         df.to_parquet(
             join(tokenized_path, f"features_{split}", f"{shard_n}.parquet"),
@@ -73,16 +85,25 @@ def create_and_save_features(cfg, splits, logger) -> None:
         f"Initialized combined_patient_info as DataFrame with shape: {combined_patient_info.shape}"
     )
 
-    # Extract bin mapping configuration
-    bin_mapping_func = (
-        cfg.get("features", {})
-        .get("values", {})
-        .get("value_creator_kwargs", {})
-        .get("bin_mapping_func")
-    )
-    bin_mapping = (
-        make_bin_mapping(bin_mapping_func, cfg.paths.data) if bin_mapping_func else None
-    )
+    # Determine value args
+    # Determine value type and segment creation strategy
+    features_cfg = cfg.get("features", {})
+    value_type = features_cfg.get("values", {}).get("value_type", None)
+    if value_type is not None:
+        value_args = features_cfg.get("values", {}).get("value_creator_kwargs", {})
+        if (
+            value_args.get("bin_values", False)
+            and value_args.get("bin_mapping_func", None) is not None
+        ):
+            bin_mapping = make_bin_mapping(
+                value_args.get("bin_mapping_func", None), cfg.paths.data
+            )
+        else:
+            bin_mapping = None
+        logger.info(f"Value type: {value_type}")
+        logger.info(f"Binning values: {value_args.get('bin_values', False)}")
+        logger.info(f"Bin mapping: {bin_mapping}")
+
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -133,26 +154,12 @@ def create_and_save_features(cfg, splits, logger) -> None:
             )
             total_concepts_after_exclusion += len(concepts)
 
-            # Determine value type and segment creation strategy
-            features_cfg = cfg.get("features", {})
-            value_type = features_cfg.get("values", {}).get("value_type", None)
-            logger.info(f"Value type: {value_type}")
-
-            # Use admission IDs for segments only if value_type is not "discrete" or "combined"
-            make_adm_segments = value_type not in [
-                "discrete",
-                "combined",
-            ] and features_cfg.get("use_admission_ids_for_segments", False)
-            logger.info(f"Using admission IDs for segments: {make_adm_segments}")
-
-            # Create row IDs if not using admission-based segments
-            if not make_adm_segments:
-                concepts = create_row_id(concepts)
+            concepts = create_row_id(concepts)
 
             # Handle numeric values
             if value_type is not None:
                 concepts = handle_numeric_values(
-                    concepts, features_cfg, bin_mapping, value_type
+                    concepts, value_args, bin_mapping, value_type
                 )
             else:
                 concepts = concepts.drop(columns=["numeric_value"])
@@ -160,12 +167,23 @@ def create_and_save_features(cfg, splits, logger) -> None:
 
             # Create features
             feature_creator = FeatureCreator()
-            features, patient_info = feature_creator(
-                concepts, use_admission_ids_for_segments=make_adm_segments
-            )
+            features, patient_info = feature_creator(concepts)
             combined_patient_info = pd.concat([combined_patient_info, patient_info])
             features = exclude_incorrect_event_ages(features)
             total_concepts_after_incorrect += len(features)
+
+            # Convert mixed types in 'code' column to strings to maintain schema compatibility
+            if "code" in features.columns:
+                features["code"] = features["code"].astype(str)
+
+            # Convert mixed types in 'code' column to strings to maintain schema compatibility
+            if "code" in features.columns:
+                features["code"] = features["code"].astype(str)
+
+            # Ensure VALUE_COL is present for schema compatibility
+            if VALUE_COL not in features.columns:
+                features[VALUE_COL] = np.nan
+
             features.to_parquet(
                 f"{split_save_path}/{shard_n}.parquet",
                 index=False,
@@ -257,7 +275,7 @@ def handle_aggregations(
 
 def handle_numeric_values(
     concepts: pd.DataFrame,
-    features_cfg: dict = None,
+    values_cfg: dict = None,
     bin_mapping: dict = None,
     value_type: str = None,
 ) -> pd.DataFrame:
@@ -269,29 +287,20 @@ def handle_numeric_values(
         concepts: DataFrame containing concepts data
         features_cfg: Configuration object containing features settings
     """
-    if "numeric_value" not in concepts.columns:
+    if VALUE_COL not in concepts.columns:
         return concepts
 
-    if features_cfg and "values" in features_cfg:
-        num_bins = features_cfg.values.value_creator_kwargs.get("num_bins", 100)
-        add_prefix = features_cfg.values.value_creator_kwargs.get("add_prefix", False)
-        separator_regex = features_cfg.values.value_creator_kwargs.get(
-            "separator_regex", None
+    if values_cfg is not None:
+        return ValueCreator.add_values(
+            concepts,
+            bin_values=values_cfg.get("bin_values", False),
+            num_bins=values_cfg.get("num_bins", 100),
+            bin_mapping=bin_mapping,
+            value_type=value_type,
+            add_prefix=values_cfg.get("add_prefix", False),
+            separator_regex=values_cfg.get("separator_regex", None),
         )
-        if separator_regex is not None and not is_valid_regex(separator_regex):
-            raise ValueError(f"Invalid regex: {separator_regex}")
-        if value_type == "discrete":
-            return ValueCreatorDiscrete.bin_results(
-                concepts,
-                num_bins=num_bins,
-                bin_mapping=bin_mapping,
-                add_prefix=add_prefix,
-                separator_regex=separator_regex,
-            )
-        else:
-            raise ValueError(f"Unsupported value type: {value_type}")
-
-    return concepts.drop(columns=["numeric_value"])
+    return concepts.drop(columns=[VALUE_COL])
 
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from corebehrt.constants.data import DEFAULT_VOCABULARY
+from corebehrt.constants.data import DEFAULT_VOCABULARY, CONCEPT_COL
 from corebehrt.functional.features.tokenize import (
     add_special_tokens_partition,
     limit_concept_length_partition,
@@ -43,22 +43,22 @@ class EHRTokenizer:
         """
         # Apply code mapping if provided
         if self.code_mapping is not None:
-            features["code"] = features["code"].map(
+            features[CONCEPT_COL] = features[CONCEPT_COL].map(
                 lambda x: self.code_mapping.get(x, x)
             )
 
         # Apply cutoffs if needed before updating vocabulary
         if self.cutoffs:
-            features["code"] = limit_concept_length_partition(
-                features["code"], self.cutoffs
+            features[CONCEPT_COL] = limit_concept_length_partition(
+                features[CONCEPT_COL], self.cutoffs
             )
         else:
             # Ensure concepts are strings
-            features["code"] = features["code"].astype(str)
+            features[CONCEPT_COL] = features[CONCEPT_COL].astype(str)
 
         # Update vocabulary with concepts after cutoffs
         if self.new_vocab:
-            self.update_vocabulary(features["code"])
+            self.update_vocabulary(features[CONCEPT_COL])
 
         # Combine all operations into a single partition pass
         def _process_partition(df):
@@ -68,7 +68,8 @@ class EHRTokenizer:
                     df, add_sep=self.sep_tokens, add_cls=self.cls_token
                 )
             # Tokenize within the same partition
-            df["code"] = tokenize_partition(df["code"], self.vocabulary)
+            tokenized_codes = tokenize_partition(df[CONCEPT_COL], self.vocabulary)
+            df[CONCEPT_COL] = tokenized_codes
             return df
 
         # return features.map_partitions(_process_partition)

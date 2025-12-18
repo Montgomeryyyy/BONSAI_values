@@ -1,6 +1,6 @@
 import re
 import unittest
-
+import numpy as np
 import pandas as pd
 
 from corebehrt.constants.data import CONCEPT_COL, PID_COL
@@ -39,6 +39,7 @@ class TestBackgroundFunctions(unittest.TestCase):
                 abspos=[1, 2, 3],
                 segments=[0, 0, 0],
                 ages=[30, 31, 32],
+                values=[np.nan, np.nan, np.nan],
                 outcome=0,
             ),
             PatientData(
@@ -47,6 +48,7 @@ class TestBackgroundFunctions(unittest.TestCase):
                 abspos=[4, 5],
                 segments=[1, 1],
                 ages=[40, 41],
+                values=[np.nan, np.nan],
                 outcome=1,
             ),
         ]

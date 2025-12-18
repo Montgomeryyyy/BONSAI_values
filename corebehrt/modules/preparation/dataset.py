@@ -15,6 +15,7 @@ from corebehrt.constants.data import (
     ATTENTION_MASK,
     CONCEPT_FEAT,
     SEGMENT_FEAT,
+    VALUE_FEAT,
     TARGET,
 )
 from corebehrt.modules.preparation.mask import ConceptMasker
@@ -27,6 +28,7 @@ class PatientData:
     abspos: List[float]  # or int, depends on your data
     segments: List[int]
     ages: List[float]  # e.g. age at each concept
+    values: List[float]
     outcome: int = None
 
 
@@ -175,12 +177,9 @@ class MLMDataset(Dataset):
         4. Return a dict that PyTorch can collate into a batch.
         """
         patient = self.patients[index]
-        concepts = torch.tensor(patient.concepts, dtype=torch.long)
-        if self.masker is not None:
-            masked_concepts, target = self.masker.mask_patient_concepts(concepts)
-        else:
-            masked_concepts = concepts
-            target = torch.zeros(concepts.shape[0], dtype=torch.long)
+        concepts = torch.tensor(patient.concepts)
+        values = torch.tensor(patient.values)
+        masked_concepts, target = self.masker.mask_patient_concepts(concepts)
         attention_mask = torch.ones_like(masked_concepts)
         sample = {
             CONCEPT_FEAT: masked_concepts,
@@ -189,6 +188,7 @@ class MLMDataset(Dataset):
             SEGMENT_FEAT: torch.tensor(patient.segments, dtype=torch.long),
             AGE_FEAT: torch.tensor(patient.ages, dtype=torch.float),
             ATTENTION_MASK: attention_mask,
+            VALUE_FEAT: values,
         }
 
         return sample
@@ -213,6 +213,7 @@ class BinaryOutcomeDataset(Dataset):
         )  # Require attention mask for bi-gru head
         sample = {
             CONCEPT_FEAT: torch.tensor(patient.concepts, dtype=torch.long),
+            VALUE_FEAT: torch.tensor(patient.values, dtype=torch.float),
             ABSPOS_FEAT: torch.tensor(patient.abspos, dtype=torch.float),
             SEGMENT_FEAT: torch.tensor(patient.segments, dtype=torch.long),
             AGE_FEAT: torch.tensor(patient.ages, dtype=torch.float),

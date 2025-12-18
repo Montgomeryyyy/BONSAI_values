@@ -1,5 +1,5 @@
 import unittest
-
+import numpy as np
 from corebehrt.modules.preparation.dataset import PatientData
 from corebehrt.functional.preparation.filter import (
     exclude_short_sequences,
@@ -25,6 +25,7 @@ class TestExcludeShortSequences(unittest.TestCase):
                 100.0 / (365.25 * 24),
                 200.0 / (365.25 * 24),
             ],  # ages in years from DOB
+            values=[np.nan, np.nan, np.nan],
         )
         # Background token only, then 1 event
         p2 = PatientData(
@@ -33,6 +34,7 @@ class TestExcludeShortSequences(unittest.TestCase):
             abspos=[0.0, 50.0],  # DOB, then event 50 hours later
             segments=[0, 0],
             ages=[0.0, 50.0 / (365.25 * 24)],
+            values=[np.nan, np.nan],
         )
         patients = [p1, p2]
 
@@ -52,10 +54,11 @@ class TestExcludeShortSequences(unittest.TestCase):
         # Exactly matching the min_len
         p1 = PatientData(
             1,
-            [1, 2],  # background + 1 event
-            [0.0, 100.0],  # DOB + event 100 hours later
-            [0, 1],
-            [0.0, 100.0 / (365.25 * 24)],  # ages from DOB
+            concepts=[1, 2],  # background + 1 event
+            abspos=[0.0, 100.0],  # DOB + event 100 hours later
+            segments=[0, 1],
+            ages=[0.0, 100.0 / (365.25 * 24)],  # ages from DOB
+            values=[np.nan, np.nan],
         )
         patients = [p1]
         result = exclude_short_sequences(patients, min_len=2)
@@ -73,6 +76,7 @@ class TestCensorPatient(unittest.TestCase):
             abspos=[0.0, 10.0, 30.0],  # DOB, then events at 10h and 30h
             segments=[0, 0, 1],
             ages=[0.0, 10.0 / (365.25 * 24), 30.0 / (365.25 * 24)],  # ages in years
+            values=[np.nan, np.nan, np.nan],
         )
         censor_dates = pd.Series({1: 10.0})  # censor at 10 hours
 
@@ -92,10 +96,11 @@ class TestCensorPatient(unittest.TestCase):
         # If censor_date is large, everything is included
         p1 = PatientData(
             1,
-            [101],
-            [0.0],  # DOB at hour 0
-            [0],
-            [0.0],  # age 0 at DOB
+            concepts=[101],
+            abspos=[0.0],  # DOB at hour 0
+            segments=[0],
+            ages=[0.0],  # age 0 at DOB
+            values=[np.nan],
         )
         censor_dates = pd.Series({1: 8760.0})  # censor at 8760 hours (1 year later)
         censored = censor_patient(p1, censor_dates, predict_token_id=102)
@@ -137,6 +142,7 @@ class TestCensorPatientWithDelays(unittest.TestCase):
                 40.0 / (365.25 * 24),
                 50.0 / (365.25 * 24),
             ],
+            values=[np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
         )
 
         # Setup delays: only specify delays for groups 1 and 2
@@ -178,6 +184,7 @@ class TestCensorPatientWithDelays(unittest.TestCase):
                 20.0 / (365.25 * 24),
                 30.0 / (365.25 * 24),
             ],
+            values=[np.nan, np.nan, np.nan, np.nan],
         )
 
         concept_delays = {}  # empty delay mapping

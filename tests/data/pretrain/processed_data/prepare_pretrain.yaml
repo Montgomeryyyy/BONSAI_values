@@ -4,8 +4,10 @@ data:
     month: 1
     year: 2020
   min_len: 2
+  mode: train
   predefined_splits: false
-  truncation_len: 20
+  split_data: true
+  truncation_len: 30
   type: pretrain
   val_ratio: 0.2
 logging:

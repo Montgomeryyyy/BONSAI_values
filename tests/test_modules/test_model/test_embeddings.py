@@ -60,8 +60,15 @@ class TestEhrEmbeddings(unittest.TestCase):
         segments = torch.randint(0, 4, (batch_size, seq_len))
         age = torch.rand(batch_size, seq_len)
         abspos = torch.arange(seq_len).expand(batch_size, -1)
+        values = torch.rand(batch_size, seq_len)
 
-        out = self.ehr(input_ids=input_ids, segments=segments, age=age, abspos=abspos)
+        out = self.ehr(
+            input_ids=input_ids,
+            segments=segments,
+            age=age,
+            abspos=abspos,
+            values=values,
+        )
         self.assertEqual(out.shape, (batch_size, seq_len, 8))  # 8 is h
 
 

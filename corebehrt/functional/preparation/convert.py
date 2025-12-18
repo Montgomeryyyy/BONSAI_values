@@ -10,6 +10,7 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     AGE_COL,
+    VALUE_COL,
 )
 
 
@@ -23,6 +24,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
             - abspos: Absolute positions/timestamps
             - segment: Segment IDs
             - age: Patient ages
+            - numeric_value: Numeric values for concepts
 
     Returns:
         List[PatientData]: List of PatientData objects, where each object contains:
@@ -31,6 +33,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
             - abspos (List[float]): List of absolute positions/timestamps
             - segments (List[int]): List of segment IDs
             - ages (List[float]): List of patient ages
+            - values (List[float]): List of numeric values
     """
     patients_data = []
 
@@ -44,6 +47,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
         abspos_list = group[ABSPOS_COL].tolist()
         segments_list = group[SEGMENT_COL].tolist()
         ages_list = group[AGE_COL].tolist()
+        values_list = group[VALUE_COL].tolist()
         # Create a PatientData instance
         patient = PatientData(
             pid=pid,
@@ -51,6 +55,7 @@ def dataframe_to_patient_list(df: pd.DataFrame) -> List[PatientData]:
             abspos=abspos_list,
             segments=segments_list,
             ages=ages_list,
+            values=values_list,
         )
 
         patients_data.append(patient)

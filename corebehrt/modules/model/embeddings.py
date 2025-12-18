@@ -49,11 +49,14 @@ class EhrEmbeddings(nn.Module):
         super().__init__()
         self.LayerNorm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(embedding_dropout)
+        self.hidden_size = hidden_size
 
         # Initialize embeddings
         self.concept_embeddings = nn.Embedding(
             vocab_size, hidden_size, padding_idx=pad_token_id
         )
+        self.value_embeddings = ContinuousEmbedding(hidden_size)
+
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
         self.age_embeddings = Time2Vec(
             hidden_size,
@@ -77,12 +80,18 @@ class EhrEmbeddings(nn.Module):
         age: torch.Tensor = None,
         abspos: torch.Tensor = None,
         inputs_embeds: torch.Tensor = None,
+        values: torch.Tensor = None,
     ) -> torch.Tensor:
-        if not self._validate_inputs(input_ids, segments, age, abspos, inputs_embeds):
+        if not self._validate_inputs(
+            input_ids, segments, age, abspos, inputs_embeds, values
+        ):
             raise ValueError("Invalid input arguments")
         if inputs_embeds is not None:
             return inputs_embeds
-        embeddings = self.concept_embeddings(input_ids)
+
+        # Separate embedding for concepts and values
+        concept_embeddings = self.get_input_embeddings(input_ids, values)
+        embeddings = concept_embeddings
 
         embeddings += self.segment_embeddings(segments)
         embeddings += self.age_embeddings(age)
@@ -100,10 +109,56 @@ class EhrEmbeddings(nn.Module):
         age: Optional[torch.Tensor],
         abspos: Optional[torch.Tensor],
         inputs_embeds: Optional[torch.Tensor],
+        values: Optional[torch.Tensor],
     ) -> bool:
         if inputs_embeds is not None:
-            return not any(x is not None for x in [input_ids, segments, age, abspos])
-        return all(x is not None for x in [input_ids, segments, age, abspos])
+            return not any(
+                x is not None for x in [input_ids, segments, age, abspos, values]
+            )
+        return all(x is not None for x in [input_ids, segments, age, abspos, values])
+
+    def get_input_embeddings(
+        self, input_ids: torch.LongTensor, values: torch.Tensor
+    ) -> torch.Tensor:
+        value_mask = ~torch.isnan(values)
+
+        B, F = input_ids.shape
+
+        # Get the target dtype from model parameters
+        target_dtype = next(self.parameters()).dtype
+
+        # Process categorical values
+        cat_vals = input_ids[~value_mask].long()
+        cat_embeddings = self.concept_embeddings(cat_vals).to(target_dtype)
+
+        # Process float values
+        float_vals = values[value_mask].float()
+        float_embeddings = self.value_embeddings(float_vals).to(target_dtype)
+
+        # Create output tensor with the target dtype
+        out = torch.zeros(
+            B, F, self.hidden_size, device=input_ids.device, dtype=target_dtype
+        )
+
+        # Recombined
+        out[~value_mask] = cat_embeddings
+        out[value_mask] = float_embeddings
+
+        return out
+
+
+class ContinuousEmbedding(nn.Module):
+    def __init__(self, hidden_size: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        # self.linear_layer = nn.Linear(1, hidden_size)
+        self.value_layer = nn.Sequential(
+            nn.Linear(1, hidden_size), nn.ReLU(), nn.Linear(hidden_size, hidden_size)
+        )
+
+    def forward(self, values: torch.Tensor) -> torch.Tensor:
+        value_embed = self.value_layer(values.unsqueeze(-1))  # (B, T, H)
+        return value_embed
 
 
 class Time2Vec(torch.nn.Module):

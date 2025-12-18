@@ -160,7 +160,6 @@ def create_background(concepts: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     dob_rows = concepts[concepts[CONCEPT_COL] == BIRTH_CODE]
     birthdates = dict(zip(dob_rows[PID_COL], dob_rows[TIMESTAMP_COL]))
     concepts[BIRTHDATE_COL] = concepts[PID_COL].map(birthdates)
-
     # Exclude patients without birthdate instead of raising an error
     patients_with_dob = concepts[BIRTHDATE_COL].notna()
     if not patients_with_dob.all():
@@ -338,7 +337,8 @@ def _assign_explicit_admission_ids(
 
         current_admission_id, current_outside_id, last_timestamp = patient_states[pid]
 
-        if code.startswith(ADMISSION):
+        # Check if code is a string and starts with admission/discharge, otherwise treat as regular event
+        if isinstance(code, str) and code.startswith(ADMISSION):
             # Start new admission
             current_admission_id = get_adm_id_func()
             admission_ids[i] = current_admission_id
@@ -346,7 +346,7 @@ def _assign_explicit_admission_ids(
             current_outside_id = None
             last_timestamp = None
 
-        elif code.startswith(DISCHARGE):
+        elif isinstance(code, str) and code.startswith(DISCHARGE):
             # End current admission
             if current_admission_id is not None:
                 admission_ids[i] = current_admission_id

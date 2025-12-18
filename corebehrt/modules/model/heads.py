@@ -44,6 +44,9 @@ class BiGRU(torch.nn.Module):
         attention_mask: torch.Tensor,
         return_embedding: bool = False,
     ) -> torch.Tensor:
+        # Convert to float32 for RNN compatibility
+        hidden_states = hidden_states.float()
+
         lengths = attention_mask.sum(dim=1).cpu()
         packed = torch.nn.utils.rnn.pack_padded_sequence(
             hidden_states, lengths, batch_first=True, enforce_sorted=False

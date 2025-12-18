@@ -8,6 +8,7 @@ CLS_TOKEN = "[CLS]"
 SEP_TOKEN = "[SEP]"
 MASK_TOKEN = "[MASK]"
 PAD_TOKEN = "[PAD]"
+VAL_TOKEN = "[VAL]"
 AGE_AT_CENSORING_TOKEN = "AGE_AT_CENSORING"
 
 DEFAULT_VOCABULARY = {
@@ -16,6 +17,7 @@ DEFAULT_VOCABULARY = {
     SEP_TOKEN: 2,
     UNKNOWN_TOKEN: 3,
     MASK_TOKEN: 4,
+    VAL_TOKEN: 5,
 }
 
 ### Columns ###
@@ -41,14 +43,14 @@ BIRTH_CODE = "DOB"
 
 ### Schema ###
 SCHEMA = {
-    "subject_id": "int64",
-    "age": "float32",
-    "abspos": "float64",
-    "segment": "int32",
+    PID_COL: "int64",
+    AGE_COL: "float32",
+    ABSPOS_COL: "float64",
+    SEGMENT_COL: "int32",
 }
 
-FEATURES_SCHEMA = {**SCHEMA, "code": "str"}
-TOKENIZED_SCHEMA = {**SCHEMA, "code": "int32"}
+FEATURES_SCHEMA = {**SCHEMA, CONCEPT_COL: "str", VALUE_COL: "float64"}
+TOKENIZED_SCHEMA = {**SCHEMA, CONCEPT_COL: "int32", VALUE_COL: "float64"}
 
 ### Folds and Splits###
 TRAIN_KEY = "train"
@@ -60,6 +62,7 @@ CONCEPT_FEAT = "concept"
 AGE_FEAT = "age"
 ABSPOS_FEAT = "abspos"
 SEGMENT_FEAT = "segment"
+VALUE_FEAT = "numeric_value"
 ATTENTION_MASK = "attention_mask"
 TARGET = "target"
 

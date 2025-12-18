@@ -6,10 +6,6 @@ features:
     agg_func: first
     agg_window: 25
     regex: ^(?:LAB).*
-  exclude_regex: ^(?:LAB).*
-  values:
-    value_creator_kwargs:
-      num_bins: 100
 logging:
   level: INFO
   path: ./outputs/logs
