@@ -22,7 +22,6 @@ The repository includes two main branches:
 - **separate_layer**: Contains implementations of the `concat` and `FiLM` methods for numeric value representation.
 
 For more details on the overall pipeline, see the sections below.
----
 
 ---
 
