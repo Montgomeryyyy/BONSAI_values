@@ -12,6 +12,19 @@
 BONSAI helps researchers and data scientists preprocess EHR data, train models, and generate outcomes for downstream clinical predictions and analyses.
 
 ---
+This repository was developed in relation to evaluating different representations of numeric values in an EHR transformer setup, based on the BONSAI repository: https://github.com/kirilklein/PHAIR_EHR (Montgomery et al.).
+
+The repository includes two main branches:
+- **main**: Supports the `discrete`, `combined`, and `comb_binning` methods for handling numeric values. Key implementation files include:
+  - `corebehrt.modules.model.embeddings` - Embedding layer implementations
+  - `corebehrt.modules.model.model` - Model architecture and training logic
+  - `corebehrt.modules.features.values` - Value processing and integration into the pipeline
+- **separate_layer**: Contains implementations of the `concat` and `FiLM` methods for numeric value representation.
+
+For more details on the overall pipeline, see the sections below.
+---
+
+---
 
 ## Table of Contents
 
@@ -152,7 +165,7 @@ For running BONSAI on Azure cloud infrastructure using SDK v2, refer to the [Azu
 - Environment preparation
 
 # Values
-BONSAI supports handling numerical values (e.g., lab results, risk scores) through **discretisation**, **seperate_layer**, and **combined**. For details on this refer to [main README](corebehrt/main/README.md).
+BONSAI supports handling numerical values (e.g., lab results, risk scores) through **discretisation**, and **combined**. For details on this refer to [main README](corebehrt/main/README.md).
 
 ## Contributing
 
