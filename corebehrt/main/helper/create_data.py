@@ -88,22 +88,24 @@ def create_and_save_features(cfg, splits, logger) -> None:
     # Determine value args
     # Determine value type and segment creation strategy
     features_cfg = cfg.get("features", {})
-    value_type = features_cfg.get("values", {}).get("value_type", None)
+    values_cfg = features_cfg.get("values", {})
+    value_type = values_cfg.get("value_type", None)
+    
     if value_type is not None:
-        value_args = features_cfg.get("values", {}).get("value_creator_kwargs", {})
-        if (
-            value_args.get("bin_values", False)
-            and value_args.get("bin_mapping_func", None) is not None
-        ):
-            bin_mapping = make_bin_mapping(
-                value_args.get("bin_mapping_func", None), cfg.paths.data
-            )
-        else:
-            bin_mapping = None
-        logger.info(f"Value type: {value_type}")
-        logger.info(f"Binning values: {value_args.get('bin_values', False)}")
-        logger.info(f"Bin mapping: {bin_mapping}")
-
+        value_args = values_cfg.get("value_creator_kwargs", {})
+        bin_values = True if value_type == "discrete" else value_args.get("bin_values", False) 
+        bin_mapping_func = value_args.get("bin_mapping_func")
+        bin_mapping = (
+            make_bin_mapping(bin_mapping_func, cfg.paths.data)
+            if bin_values and bin_mapping_func is not None
+            else None
+        )
+        logger.info(f"Value type: {value_type}, Binning: {bin_values}, Bin mapping: {bin_mapping}")
+    else:
+        value_args = None
+        bin_values = False
+        bin_mapping = None
+        
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
@@ -159,7 +161,7 @@ def create_and_save_features(cfg, splits, logger) -> None:
             # Handle numeric values
             if value_type is not None:
                 concepts = handle_numeric_values(
-                    concepts, value_args, bin_mapping, value_type
+                    concepts, value_args, bin_values, bin_mapping, value_type
                 )
             else:
                 concepts = concepts.drop(columns=["numeric_value"])
@@ -276,6 +278,7 @@ def handle_aggregations(
 def handle_numeric_values(
     concepts: pd.DataFrame,
     values_cfg: dict = None,
+    bin_values: bool = False,
     bin_mapping: dict = None,
     value_type: str = None,
 ) -> pd.DataFrame:
@@ -293,7 +296,7 @@ def handle_numeric_values(
     if values_cfg is not None:
         return ValueCreator.add_values(
             concepts,
-            bin_values=values_cfg.get("bin_values", False),
+            bin_values=bin_values,
             num_bins=values_cfg.get("num_bins", 100),
             bin_mapping=bin_mapping,
             value_type=value_type,
