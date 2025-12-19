@@ -90,22 +90,26 @@ def create_and_save_features(cfg, splits, logger) -> None:
     features_cfg = cfg.get("features", {})
     values_cfg = features_cfg.get("values", {})
     value_type = values_cfg.get("value_type", None)
-    
+
     if value_type is not None:
         value_args = values_cfg.get("value_creator_kwargs", {})
-        bin_values = True if value_type == "discrete" else value_args.get("bin_values", False) 
+        bin_values = (
+            True if value_type == "discrete" else value_args.get("bin_values", False)
+        )
         bin_mapping_func = value_args.get("bin_mapping_func")
         bin_mapping = (
             make_bin_mapping(bin_mapping_func, cfg.paths.data)
             if bin_values and bin_mapping_func is not None
             else None
         )
-        logger.info(f"Value type: {value_type}, Binning: {bin_values}, Bin mapping: {bin_mapping}")
+        logger.info(
+            f"Value type: {value_type}, Binning: {bin_values}, Bin mapping: {bin_mapping}"
+        )
     else:
         value_args = None
         bin_values = False
         bin_mapping = None
-        
+
     for split_name in splits:
         logger.info(f"Creating features for {split_name}")
         path_name = f"{cfg.paths.data}/{split_name}"
