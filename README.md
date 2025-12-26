@@ -12,7 +12,7 @@
 BONSAI helps researchers and data scientists preprocess EHR data, train models, and generate outcomes for downstream clinical predictions and analyses.
 
 ---
-This repository was developed in relation to evaluating different representations of numeric values in an EHR transformer setup, based on the BONSAI repository: https://github.com/kirilklein/PHAIR_EHR (Montgomery et al.).
+This repository was developed in relation to evaluating different representations of numeric values in an EHR transformer setup, based on the BONSAI repository: https://github.com/kirilklein/PHAIR_EHR .
 
 The repository includes two main branches:
 - **main**: Supports the `discrete`, `combined`, and `comb_binning` methods for handling numeric values. Key implementation files include:
