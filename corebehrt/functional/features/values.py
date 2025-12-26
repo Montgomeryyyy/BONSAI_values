@@ -3,8 +3,6 @@ import pandas as pd
 from corebehrt.constants.data import CONCEPT_COL, VALUE_COL
 
 
-
-
 def power_bin_info_efficiency_mean(n_unique: int) -> int:
     """
     Bins the values in a series into num_bins bins. Expects the values to be normalised.
