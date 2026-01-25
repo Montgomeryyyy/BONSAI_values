@@ -73,6 +73,7 @@ def create(component: callable):
             "select_cohort",
         )(
             features=features,
+            tokenized=tokenized,
             outcomes=outcomes,
         )
 
@@ -93,10 +94,38 @@ def create(component: callable):
             pretrain_model=pretrain_model,
         )
 
+        select_cohort_held_out = component(
+            "select_cohort",
+            name="select_held_out_cohort",
+        )(
+            features=features,
+            tokenized=tokenized,
+            outcomes=outcomes,
+        )
+
+        prepare_held_out = component(
+            "prepare_training_data",
+            name="prepare_held_out",
+        )(
+            features=features,
+            tokenized=tokenized,
+            cohort=select_cohort_held_out.outputs.cohort,
+            outcomes=outcomes,
+        )
+
+        evaluate_finetune = component(
+            "evaluate_finetune",
+        )(
+            model=finetune.outputs.model,
+            folds_dir=prepare_finetune.outputs.prepared_data,
+            test_data_dir=prepare_held_out.outputs.prepared_data,
+        )
+
         return {
             "model": finetune.outputs.model,
+            "predictions": evaluate_finetune.outputs.predictions,
         }
-
+        
     @dsl.pipeline(
         name="finetune_without_outcomes",
         description="Finetune CoreBEHRT pipeline with auto-created outcomes",
@@ -119,6 +148,7 @@ def create(component: callable):
             "select_cohort",
         )(
             features=features,
+            tokenized=tokenized,
             outcomes=create_outcomes.outputs.outcomes,
         )
 
@@ -139,8 +169,36 @@ def create(component: callable):
             pretrain_model=pretrain_model,
         )
 
+        select_cohort_held_out = component(
+            "select_cohort",
+            name="select_held_out_cohort",
+        )(
+            features=features,
+            tokenized=tokenized,
+            outcomes=create_outcomes.outputs.outcomes,
+        )
+
+        prepare_held_out = component(
+            "prepare_training_data",
+            name="prepare_held_out",
+        )(
+            features=features,
+            tokenized=tokenized,
+            cohort=select_cohort_held_out.outputs.cohort,
+            outcomes=create_outcomes.outputs.outcomes,
+        )
+
+        evaluate_finetune = component(
+            "evaluate_finetune",
+        )(
+            model=finetune.outputs.model,
+            folds_dir=prepare_finetune.outputs.prepared_data,
+            test_data_dir=prepare_held_out.outputs.prepared_data,
+        )
+
         return {
             "model": finetune.outputs.model,
+            "predictions": evaluate_finetune.outputs.predictions,
         }
 
     # Return the factory function instead of a direct pipeline
