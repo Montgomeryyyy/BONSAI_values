@@ -3,21 +3,14 @@ import pandas as pd
 from corebehrt.constants.data import CONCEPT_COL, VALUE_COL
 
 
-def power_bin_d_sig_mean(n_unique: int) -> int:
+
+def power_bin_info_efficiency_mean(n_unique: int) -> int:
     """
     Bins the values in a series into num_bins bins. Expects the values to be normalised.
+    Uses the power law derived from the information efficiency of the bins.
     """
-    bins = int(3.25 * n_unique**0.195)
+    bins = int(1.14 * n_unique**0.237) # int(1.12 * n_unique**0.244)
     return bins
-
-
-def power_bin_distance_mean(n_unique: int) -> int:
-    """
-    Bins the values in a series into num_bins bins. Expects the values to be normalised.
-    """
-    bins = int(4.85 * n_unique**0.163)
-    return bins
-
 
 def get_unique_value_counts(features_path: str, splits: list) -> dict:
     """
