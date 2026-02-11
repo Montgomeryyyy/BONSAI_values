@@ -125,7 +125,7 @@ def create(component: callable):
             "model": finetune.outputs.model,
             "predictions": evaluate_finetune.outputs.predictions,
         }
-        
+
     @dsl.pipeline(
         name="finetune_without_outcomes",
         description="Finetune CoreBEHRT pipeline with auto-created outcomes",

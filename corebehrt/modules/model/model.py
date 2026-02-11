@@ -155,7 +155,7 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         last_hidden_state = outputs[0]  # (B, L, H)
 
         # === Inputs ===
-        labels_full = batch.get(TARGET)       # (B, L)
+        labels_full = batch.get(TARGET)  # (B, L)
         value_targets_full = batch.get(VALUE_FEAT)  # (B, L)
 
         labels = labels_full
@@ -171,7 +171,7 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             mask_tokens = labels_flat != self.sparse_pred_ignore_index  # (B*L,)
 
             # Apply mask to labels and hidden
-            labels = labels_flat[mask_tokens]           # (N_masked,)
+            labels = labels_flat[mask_tokens]  # (N_masked,)
             last_hidden_state = hidden_flat[mask_tokens]  # (N_masked, H)
 
             # IMPORTANT FIX: apply the same transform to value_targets
@@ -208,7 +208,9 @@ class CorebehrtForPretraining(CorebehrtEncoder):
                 val_mask = ~torch.isnan(val_targets)
 
                 if val_mask.any():
-                    val_hidden = last_hidden_state[val_positions][val_mask]  # (N_valid, H)
+                    val_hidden = last_hidden_state[val_positions][
+                        val_mask
+                    ]  # (N_valid, H)
                     predicted_values = self.val_head(val_hidden).squeeze(-1)
                     target_values = val_targets[val_mask]
 
@@ -227,7 +229,6 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             outputs.loss = concept_loss
 
         return outputs
-
 
     def get_loss(self, logits, labels):
         """Calculate loss for masked language model."""

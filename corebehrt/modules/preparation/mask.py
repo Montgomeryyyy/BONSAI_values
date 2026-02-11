@@ -24,7 +24,13 @@ class ConceptMasker:
 
         self.vocabulary = vocabulary
         self.n_special_tokens = (
-            len([token for token in vocabulary if token.startswith("[") and token != VAL_TOKEN])
+            len(
+                [
+                    token
+                    for token in vocabulary
+                    if token.startswith("[") and token != VAL_TOKEN
+                ]
+            )
             if ignore_special_tokens
             else 0
         )
