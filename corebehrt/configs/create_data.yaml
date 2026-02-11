@@ -29,7 +29,7 @@ features:
     agg_window: 25 # expand aggreation window to aggreate over x hours
 
 tokenizer:
-  sep_tokens: false
+  sep_tokens: true
   cls_token: true
 
 excluder:
