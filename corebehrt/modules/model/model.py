@@ -201,7 +201,6 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             # In sparse mode, labels/value_targets/hidden are all (N_masked, ...)
             # Only compute value loss where the masked label is [VAL]
             val_positions = labels == self.val_token_id  # (N_masked,)
-            print(val_positions)
 
             if val_positions.any():
                 val_targets = value_targets[val_positions]  # (N_val_masked,)
