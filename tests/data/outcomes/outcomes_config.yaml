@@ -32,16 +32,11 @@ outcomes:
     exclude:
     - D437
     match:
-    - - D0
-      - D1
+    - - D01
     match_how: startswith
     type:
     - code
 paths:
   data: ./tests/data/raw
-  features: ./outputs/features
-  outcomes: ./outputs//outcomes
-  splits:
-  - train
-  - tuning
-  - held_out
+  features: ./tests/data/features
+  outcomes: ./tests/data/outcomes
