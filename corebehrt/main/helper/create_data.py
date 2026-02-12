@@ -196,6 +196,8 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 schema=pa.schema(FEATURES_SCHEMA),
             )
 
+            print(features.head(20))
+
         # Log final statistics for this split
         logger.info(f"Total concepts loaded: {total_concepts_loaded}")
         logger.info(f"Total concepts after aggregation: {total_concepts_after_agg}")
@@ -307,7 +309,6 @@ def handle_numeric_values(
             add_prefix=values_cfg.get("add_prefix", False),
             separator_regex=values_cfg.get("separator_regex", None),
         )
-    return concepts.drop(columns=[VALUE_COL])
 
         # TODO: add both support for discrete and continuous values
 

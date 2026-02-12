@@ -26,7 +26,9 @@ from corebehrt.constants.data import (
     SEGMENT_FEAT,
     TARGET,
     VALUE_FEAT,
+    TARGET_VALUE,
     VAL_TOKEN,
+    VALUE_MASK_TOKEN
 )
 from corebehrt.constants.model import (
     TIME2VEC_ABSPOS_SCALE,
@@ -97,7 +99,6 @@ class CorebehrtEncoder(ModernBertModel):
             segments=batch[SEGMENT_FEAT],
             age=batch[AGE_FEAT],
             abspos=batch[ABSPOS_FEAT],
-            values=batch[VALUE_FEAT],
         )
 
         return super().forward(
@@ -157,11 +158,9 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         last_hidden_state = outputs[0]  # (B, L, H)
 
         # === Inputs ===
-        labels_full = batch.get(TARGET)  # (B, L)
-        value_targets_full = batch.get(VALUE_FEAT)  # (B, L)
-
-        labels = labels_full
-        value_targets = value_targets_full
+        labels = batch.get(TARGET)  # (B, L)
+        value_labels = batch.get(TARGET_VALUE)  # (B, L)
+        values_input = batch.get(VALUE_FEAT)  # (B, L)
 
         # === Sparse prediction: align everything to masked positions ===
         if self.sparse_prediction and labels is not None:
@@ -177,8 +176,9 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             last_hidden_state = hidden_flat[mask_tokens]  # (N_masked, H)
 
             # IMPORTANT FIX: apply the same transform to value_targets
-            if value_targets is not None:
-                value_targets = value_targets.view(-1)[mask_tokens]  # (N_masked,)
+            if value_labels is not None:
+                value_labels = value_labels.view(-1)[mask_tokens]  # (N_masked,)
+                values_input = values_input.view(-1)[mask_tokens]  # (N_masked,)
 
         # === Concept Prediction ===
         logits = self.decoder(self.head(last_hidden_state))  # (N, vocab_size)
@@ -197,31 +197,35 @@ class CorebehrtForPretraining(CorebehrtEncoder):
             concept_loss = torch.tensor(0.0, device=last_hidden_state.device)
 
         # === Value Prediction ===
+        # Predict values for all masked positions (similar to concept prediction)
+        if value_labels is not None:
+            predicted_values_all = self.val_head(last_hidden_state).squeeze(-1)  # (N_masked,)
+            outputs.predicted_values = predicted_values_all
+        else:
+            predicted_values_all = None
+
         value_loss = torch.tensor(0.0, device=last_hidden_state.device)
 
-        if value_targets is not None and labels is not None:
-            # In sparse mode, labels/value_targets/hidden are all (N_masked, ...)
-            # Only compute value loss where the masked label is [VAL]
-            val_positions = labels == self.val_token_id  # (N_masked,)
+        if value_labels is not None and values_input is not None and labels is not None:
+            # Only compute value loss where: (1) value was masked, (2) we have a valid target
+            # Masked values have values_input as VALUE_MASK_TOKEN 
+            val_positions = (values_input == VALUE_MASK_TOKEN) # compatible with combined and separate
 
             if val_positions.any():
-                val_targets = value_targets[val_positions]  # (N_val_masked,)
+                val_targets = value_labels[val_positions]  # (N_val_masked,)
+                val_predictions = predicted_values_all[val_positions]  # (N_val_masked,)
                 val_mask = ~torch.isnan(val_targets)
 
                 if val_mask.any():
-                    val_hidden = last_hidden_state[val_positions][
-                        val_mask
-                    ]  # (N_valid, H)
-                    predicted_values = self.val_head(val_hidden).squeeze(-1)
-                    target_values = val_targets[val_mask]
+                    target_values = val_targets[val_mask]  # (N_valid,)
+                    predicted_values = val_predictions[val_mask]  # (N_valid,)
 
                     value_loss = self.val_loss_fct(predicted_values, target_values)
-                    outputs.predicted_values = predicted_values
 
         outputs.value_loss = value_loss
 
         # === Final loss ===
-        if labels is not None and value_targets is not None:
+        if labels is not None and value_labels is not None:
             weight = self.value_loss_weight
             outputs.loss = concept_loss + weight * value_loss
             outputs.mlm_loss = concept_loss

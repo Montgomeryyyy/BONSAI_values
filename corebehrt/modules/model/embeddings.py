@@ -10,7 +10,7 @@ from corebehrt.constants.model import (
     TIME2VEC_AGE_SHIFT,
     TIME2VEC_ABSPOS_SHIFT,
 )
-from corebehrt.constants.data import DEFAULT_VOCABULARY, PAD_TOKEN, VALUE_NULL_TOKEN
+from corebehrt.constants.data import DEFAULT_VOCABULARY, PAD_TOKEN
 from typing import Optional
 
 
@@ -46,7 +46,6 @@ class EhrEmbeddings(nn.Module):
         abspos_scale: float = TIME2VEC_ABSPOS_SCALE,
         age_shift: float = TIME2VEC_AGE_SHIFT,
         abspos_shift: float = TIME2VEC_ABSPOS_SHIFT,
-        separate_value_embedding: bool = False,
         value_embedding_mode: str = None
     ):
         super().__init__()
@@ -59,11 +58,15 @@ class EhrEmbeddings(nn.Module):
             vocab_size, hidden_size, padding_idx=pad_token_id
         )
 
-        self.separate_value_embedding = separate_value_embedding
-        if separate_value_embedding:
-            assert value_embedding_mode != None 
+        self.value_embedding_mode = value_embedding_mode
+        print("value_embedding_mode in embedding ehr", value_embedding_mode)
+        if value_embedding_mode in ["film", "concat", "linear"]:
+            print("separate continuous embedding")
+            self.separate_value_embedding = True
             self.value_embeddings = SeparateContinuousEmbedding(hidden_size, value_embedding_mode)
         else:
+            self.separate_value_embedding = False
+            print("continuous embedding")
             self.value_embeddings = ContinuousEmbedding(hidden_size)
 
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
@@ -181,9 +184,9 @@ class ContinuousEmbedding(nn.Module):
 
 
 class SeparateContinuousEmbedding(nn.Module):
-    def __init__(self, hidden_size: int, mode: str = None):
+    def __init__(self, hidden_size: int, value_embedding_mode: str = None):
         super().__init__()
-        self.mode = mode
+        self.value_embedding_mode = value_embedding_mode
         self.hidden_size = hidden_size
 
         self.value_proj = nn.Sequential(
@@ -213,8 +216,9 @@ class SeparateContinuousEmbedding(nn.Module):
             combined = torch.cat([concept_embeds, value_embed], dim=-1)
             return self.concat_proj(combined) * mask + concept_embeds * (1 - mask)
 
-        elif self.mode == "linear":
+        elif self.value_embedding_mode == "linear":
             return value_embed
+
         else:
             raise ValueError(f"Unknown value_embedding_mode: {self.value_embedding_mode}")
 

@@ -17,8 +17,8 @@ from corebehrt.constants.data import (
     SEGMENT_FEAT,
     VALUE_FEAT,
     TARGET,
-    VALUE_FEAT,
-    VALUE_NULL_TOKEN,
+    TARGET_VALUE,
+    VALUE_MASK_TOKEN,
 )
 from corebehrt.modules.preparation.mask import ConceptMasker
 
@@ -157,7 +157,6 @@ class MLMDataset(Dataset):
         masking_ratio: float = 0.8,
         replace_ratio: float = 0.1,
         ignore_special_tokens: bool = True,
-        value_null_token: int = VALUE_NULL_TOKEN,
     ):
         self.patients = patients
         self.vocabulary = vocabulary
@@ -182,23 +181,23 @@ class MLMDataset(Dataset):
         patient = self.patients[index]
         concepts = torch.tensor(patient.concepts)
         values = torch.tensor(patient.values)
-        masked_concepts, target = self.masker.mask_patient_concepts(concepts)
+        masked_concepts, target, indices_mask = self.masker.mask_patient_concepts(concepts)
 
         # concepts = torch.tensor(patient.concepts, dtype=torch.long)
         # values = torch.tensor(patient.values, dtype=torch.float)
         # masked_concepts, target, selected_indices = self.masker.mask_patient_concepts(concepts)
-        # masked_values = values.clone()
-        # masked_values[selected_indices] = self.value_null_token
+        masked_values = values.clone()
+        masked_values[indices_mask] = VALUE_MASK_TOKEN
         attention_mask = torch.ones_like(masked_concepts)
         sample = {
             CONCEPT_FEAT: masked_concepts,
             TARGET: target,
-            # VALUE_FEAT: masked_values,
+            VALUE_FEAT: masked_values,
             ABSPOS_FEAT: torch.tensor(patient.abspos, dtype=torch.float),
             SEGMENT_FEAT: torch.tensor(patient.segments, dtype=torch.long),
             AGE_FEAT: torch.tensor(patient.ages, dtype=torch.float),
             ATTENTION_MASK: attention_mask,
-            VALUE_FEAT: values,
+            TARGET_VALUE: values,
         }
 
         return sample

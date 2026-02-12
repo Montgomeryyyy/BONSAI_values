@@ -15,17 +15,12 @@ paths:
 features:
   # exclude_regex: ^(?:LAB).* # example regex to exclude all features that start with 'LAB'
   values:
-    value_type: "discrete"
+    value_type: "combined"
     value_creator_kwargs:
-<<<<<<< HEAD
-      bin_values: true
+      bin_values: false
       # num_bins: 100
       bin_mapping_func: 
         _target_: corebehrt.functional.features.values.power_bin_info_efficiency_mean
-=======
-      null_token: -1
-      # num_bins: 100
->>>>>>> c73ff1e5 (added numeric embedding layer)
       # add_prefix: true # option to add prefix to values based on concept
       # separator_regex: r"^([^/]+)/" # everything before the seperator is the prefix
   agg_kwargs:
@@ -34,7 +29,7 @@ features:
     agg_window: 25 # expand aggreation window to aggreate over x hours
 
 tokenizer:
-  sep_tokens: true
+  sep_tokens: false
   cls_token: true
 
 excluder:

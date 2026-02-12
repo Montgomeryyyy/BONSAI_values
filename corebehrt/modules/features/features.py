@@ -28,7 +28,7 @@ class FeatureCreator:
         features, patient_info = create_background(concepts)
         features = create_age_in_years(features)
         features = create_abspos(features)
-        features = create_values(features)
+        print(features.head(20))
 
         features = assign_index_and_order(features)
         features = exclude_event_nans(

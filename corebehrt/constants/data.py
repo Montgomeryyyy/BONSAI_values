@@ -19,7 +19,7 @@ DEFAULT_VOCABULARY = {
     MASK_TOKEN: 4,
     VAL_TOKEN: 5,
 }
-VALUE_NULL_TOKEN = -1
+VALUE_MASK_TOKEN = -1
 
 ### Columns ###
 PID_COL = "subject_id"
@@ -44,18 +44,10 @@ BIRTH_CODE = "DOB"
 
 ### Schema ###
 SCHEMA = {
-<<<<<<< HEAD
     PID_COL: "int64",
     AGE_COL: "float32",
     ABSPOS_COL: "float64",
     SEGMENT_COL: "int32",
-=======
-    "subject_id": "int64",
-    "age": "float32",
-    "abspos": "float64",
-    "segment": "int32",
-    "numeric_value": "float32",
->>>>>>> c73ff1e5 (added numeric embedding layer)
 }
 
 FEATURES_SCHEMA = {**SCHEMA, CONCEPT_COL: "str", VALUE_COL: "float64"}
@@ -74,6 +66,7 @@ SEGMENT_FEAT = "segment"
 VALUE_FEAT = "numeric_value"
 ATTENTION_MASK = "attention_mask"
 TARGET = "target"
+TARGET_VALUE = "target_value"
 
 # combined outcomes
 COMBINATIONS = "combinations"

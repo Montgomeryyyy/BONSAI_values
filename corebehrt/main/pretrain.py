@@ -22,11 +22,14 @@ CONFIG_PATH = "./corebehrt/configs/pretrain.yaml"
 
 def main_train(config_path):
     cfg = load_config(config_path)
+    logger = logging.getLogger("pretrain")
 
     # Setup directories
+    data_cfg = load_config(join(cfg.paths.prepared_data, "data_config.yaml"))
+    value_embedding_mode = data_cfg.features.values.value_type
+    logger.info(f"Value embedding mode: {value_embedding_mode}")
+    cfg.model.value_embedding_mode = value_embedding_mode
     DirectoryPreparer(cfg).setup_pretrain()
-
-    logger = logging.getLogger("pretrain")
 
     # Check if we are training from checkpoint, if so, update model config
     restart_path = cfg.paths.get("restart_model")
@@ -35,15 +38,17 @@ def main_train(config_path):
 
     # Get data
     train_data = PatientDataset(
-        torch.load(join(cfg.paths.prepared_data, PREPARED_TRAIN_PATIENTS))
+        torch.load(join(cfg.paths.prepared_data, PREPARED_TRAIN_PATIENTS), weights_only=False)
     )
     val_data = PatientDataset(
-        torch.load(join(cfg.paths.prepared_data, PREPARED_VAL_PATIENTS))
+        torch.load(join(cfg.paths.prepared_data, PREPARED_VAL_PATIENTS), weights_only=False)
     )
     vocab = load_vocabulary(cfg.paths.prepared_data)
 
     # Initialize datasets
     train_dataset = MLMDataset(train_data.patients, vocab, **cfg.data.dataset)
+
+    print(train_dataset[0])
     val_dataset = MLMDataset(val_data.patients, vocab, **cfg.data.dataset)
 
     if "scheduler" in cfg:

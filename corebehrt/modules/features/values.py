@@ -1,5 +1,4 @@
 import pandas as pd
-<<<<<<< HEAD
 import numpy as np
 from corebehrt.constants.data import CONCEPT_COL, VALUE_COL, VAL_TOKEN
 
@@ -28,9 +27,6 @@ def _safe_convert_to_numeric(val):
         except (ValueError, TypeError):
             return pd.NA
     return pd.NA
-=======
-from corebehrt.constants.data import CONCEPT_COL, VALUE_COL
->>>>>>> c73ff1e5 (added numeric embedding layer)
 
 
 class ValueCreator:
@@ -40,17 +36,7 @@ class ValueCreator:
     """
 
     @staticmethod
-<<<<<<< HEAD
     def add_values(
-=======
-    def add_null_token(concepts: pd.DataFrame, null_token: int) -> pd.DataFrame:
-        concepts[VALUE_COL] = pd.to_numeric(concepts[VALUE_COL], errors="coerce")
-        concepts[VALUE_COL] = concepts[VALUE_COL].fillna(null_token)
-        return concepts
-
-    @staticmethod
-    def bin_results(
->>>>>>> c73ff1e5 (added numeric embedding layer)
         concepts: pd.DataFrame,
         bin_values: bool = False,
         bin_mapping: dict = None,
@@ -78,10 +64,9 @@ class ValueCreator:
             return ValueCreator.add_values_discrete(
                 concepts, bin_values, bin_mapping, num_bins, add_prefix, separator_regex
             )
-<<<<<<< HEAD
-        elif value_type == "combined":
+        elif value_type in ["combined", "film", "concat", "linear"]:
             return ValueCreator.add_values_continuous(
-                concepts, bin_values, bin_mapping, num_bins
+                concepts, bin_values, bin_mapping, num_bins, mode=value_type
             )
         else:
             raise ValueError(f"Unsupported value type: {value_type}")
@@ -114,10 +99,6 @@ class ValueCreator:
         # Bin values if bin_values is True (always returns integers)
         concepts = ValueCreator._apply_binning(
             concepts, bin_values, bin_mapping, num_bins
-=======
-        concepts["binned_value"] = ValueCreator.bin(
-            concepts[VALUE_COL], num_bins=num_bins
->>>>>>> c73ff1e5 (added numeric embedding layer)
         )
 
         # Discretise values (converts integers to "VAL_X" strings)
@@ -145,6 +126,7 @@ class ValueCreator:
         bin_values: bool = False,
         bin_mapping: dict = None,
         num_bins: int = 10,
+        mode: str = "combined",
     ) -> pd.DataFrame:
         """
         Add values for continuous mode (returns integers).
@@ -166,16 +148,17 @@ class ValueCreator:
         )
 
         # Create values dataframe structure
-        concepts, values = ValueCreator._create_values_dataframe(
-            concepts, add_val_token=True
-        )
-
-        if not values.empty:
-            concatted = pd.concat([concepts, values], ignore_index=True)
+        if mode == "combined":
+            concepts, values = ValueCreator._create_values_dataframe(
+                concepts, add_val_token=True
+            )
+            if not values.empty:
+                concatted = pd.concat([concepts, values], ignore_index=True)
+            else:
+                concatted = concepts
+            return concatted
         else:
-            concatted = concepts
-
-        return concatted
+            return concepts
 
     @staticmethod
     def bin(values: pd.Series, num_bins=100) -> pd.Series:
@@ -350,35 +333,6 @@ class ValueCreator:
                 values["prefix"] + "/" + values[VALUE_COL].astype(str)
             )
         else:
-<<<<<<< HEAD
             # For non-prefixed discrete, use VALUE_COL as code
             values.loc[:, CONCEPT_COL] = values[VALUE_COL].astype(str)
         return values
-=======
-            values.loc[:, "code"] = values["binned_value"]
-
-        values.loc[:, "order"] = 1
-        concatted = pd.concat([concepts, values])
-
-        # Drop columns that are not needed
-        columns_to_drop = [VALUE_COL, "binned_value"]
-        if add_prefix:
-            columns_to_drop.append("prefix")
-
-        return concatted.drop(columns=columns_to_drop, axis=1)
-
-    @staticmethod
-    def bin(normalized_values: pd.Series, num_bins=100) -> pd.Series:
-        """
-        Bins the values in a series into num_bins bins. Expects the values to be normalised.
-        """
-        normalized_values = pd.to_numeric(normalized_values, errors="coerce")
-        val_mask = normalized_values.notna()
-        normalized_values[val_mask] = normalized_values[val_mask].mul(num_bins)
-        normalized_values = normalized_values.astype(object)
-        normalized_values[val_mask] = (
-            normalized_values[val_mask].astype(int).astype(str)
-        )
-        normalized_values[val_mask] = "VAL_" + normalized_values[val_mask]
-        return normalized_values
->>>>>>> c73ff1e5 (added numeric embedding layer)
