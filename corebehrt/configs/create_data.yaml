@@ -15,7 +15,7 @@ paths:
 features:
   # exclude_regex: ^(?:LAB).* # example regex to exclude all features that start with 'LAB'
   values:
-    value_type: "combined"
+    value_type: "concat"
     value_creator_kwargs:
       bin_values: false
       # num_bins: 100

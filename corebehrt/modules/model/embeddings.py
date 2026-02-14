@@ -109,7 +109,7 @@ class EhrEmbeddings(nn.Module):
         else:
             # Separate embedding for concepts and values
             concept_embeddings = self.concept_embeddings(input_ids)
-            embeddings = self.get_separate_input_embeddings(self.value_embedding_mode, values, concept_embeddings)
+            embeddings = self.get_separate_input_embeddings(values, concept_embeddings)
 
         embeddings += self.segment_embeddings(segments)
         embeddings += self.age_embeddings(age)
@@ -164,7 +164,7 @@ class EhrEmbeddings(nn.Module):
 
         return out
     
-    def get_separate_input_embeddings(self, value_embedding_mode: str, values: torch.Tensor, concept_embeddings: torch.Tensor) -> torch.Tensor:
+    def get_separate_input_embeddings(self, values: torch.Tensor, concept_embeddings: torch.Tensor) -> torch.Tensor:
         embeddings = self.value_embeddings(values, concept_embeddings)
         return embeddings
 
@@ -205,7 +205,9 @@ class SeparateContinuousEmbedding(nn.Module):
 
     def forward(self, values: torch.Tensor, concept_embeds: torch.Tensor) -> torch.Tensor:
         mask = (~torch.isnan(values)).float().unsqueeze(-1)
-        value_embed = self.value_proj(values.unsqueeze(-1)) * mask  # (B, T, H)
+        # Replace NaN with 0 before projection to avoid NaN propagation
+        values_safe = torch.where(torch.isnan(values), torch.zeros_like(values), values)
+        value_embed = self.value_proj(values_safe.unsqueeze(-1)) * mask  # (B, T, H)
 
         if self.value_embedding_mode == "film":
             gamma = self.gamma_layer(concept_embeds)
