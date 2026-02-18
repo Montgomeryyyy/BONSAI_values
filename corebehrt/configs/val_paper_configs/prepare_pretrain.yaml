@@ -1,0 +1,10 @@
+logging:
+  level: INFO
+  path: ./logs
+
+data:
+  type: "pretrain"
+  predefined_splits: false 
+  val_ratio: 0.2 
+  truncation_len: 1024
+  min_len: 3

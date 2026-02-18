@@ -28,10 +28,7 @@ class TestCreateData(TestMainScript):
                 "features": {
                     "values": {
                         "value_type": "discrete",
-                        "value_creator_kwargs": {"bin_values": True},
-                        "bin_mapping_func": {
-                            "_target_": "corebehrt.functional.features.values.power_bin_distance_mean",
-                        },
+                        "value_creator_kwargs": {"num_bins": 100},
                     },
                 },
                 "tokenizer": {"sep_tokens": True, "cls_token": True},

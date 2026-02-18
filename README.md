@@ -14,12 +14,25 @@ BONSAI helps researchers and data scientists preprocess EHR data, train models, 
 ---
 This repository was developed in relation to evaluating different representations of numeric values in an EHR transformer setup, based on the BONSAI repository: https://github.com/kirilklein/PHAIR_EHR .
 
-The repository includes two main branches:
-- **main**: Supports the `discrete`, `combined`, and `comb_binning` methods for handling numeric values. Key implementation files include:
-  - `corebehrt.modules.model.embeddings` - Embedding layer implementations
-  - `corebehrt.modules.model.model` - Model architecture and training logic
-  - `corebehrt.modules.features.values` - Value processing and integration into the pipeline
-- **separate_layer**: Contains implementations of the `concat` and `FiLM` methods for numeric value representation.
+### Numeric Value Representation
+
+The repository supports four methods for handling numeric values (e.g., lab results, vital signs) in EHR sequences:
+
+- **`discrete`**: Discretises numeric values into categorical tokens (requires binning). Values are converted to categorical tokens and embedded using the concept embedding layer. 
+
+- **`combined`**: Uses separate embeddings for categorical concepts and continuous values, placing them in different sequence positions. Concept embeddings are used for categorical positions, while value embeddings are used for positions with numeric values. They occupy separate positions in the sequence and are not combined.
+
+- **`concat`**: Uses the same sequence positions for both concepts and values (joint embeddings). Replaces concept embeddings with a projected concatenation of concept and value embeddings. When a value exists, the final embedding is `concat_proj([concept_embeds, value_embed])`, which projects the concatenated embeddings to the hidden size. When no value exists, the original concept embeddings are used.
+
+- **`FiLM`**: Uses the same sequence positions for both concepts and values (joint embeddings). Replaces concept embeddings with Feature-wise Linear Modulation of value embeddings. When a value exists, the final embedding is `gamma * value_embed + beta`, where gamma and beta are learned linear transformations of the concept embeddings. When no value exists, the original concept embeddings are used.
+
+**Binning**: Numeric values can optionally be binned before embedding. Binning is **required** for `discrete` mode and **optional** for `combined`, `concat`, and `FiLM` modes.
+
+**Key Implementation Files**:
+- `corebehrt.modules.model.embeddings` - Embedding layer implementations for all value representation methods
+- `corebehrt.modules.model.model` - Model architecture with value prediction heads and training logic
+- `corebehrt.modules.features.values` - Value processing and integration into the feature pipeline
+- `corebehrt.functional.features.values` - Utility functions for binning and discretising numeric values 
 
 For more details on the overall pipeline, see the sections below.
 
@@ -163,8 +176,9 @@ For running BONSAI on Azure cloud infrastructure using SDK v2, refer to the [Azu
 - Job execution in the cloud
 - Environment preparation
 
-# Values
-BONSAI supports handling numerical values (e.g., lab results, risk scores) through **discretisation**, and **combined**. For details on this refer to [main README](corebehrt/main/README.md).
+## Values
+
+BONSAI supports multiple methods for handling numerical values (e.g., lab results, risk scores) in EHR sequences. See the [Numeric Value Representation](#numeric-value-representation) section above for details on the four supported methods (`discrete`, `combined`, `concat`, and `FiLM`). For implementation details and configuration options, refer to the [main README](corebehrt/main/README.md).
 
 ## Contributing
 

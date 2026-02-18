@@ -324,68 +324,75 @@ Step                     | Script           | Key Configs | Output Files
 
 
 ## 9. Values
-There are three forms for support for numerical input: discretisation, separate_layering, and combined. 
+There are four methods for handling numerical input: `discrete`, `combined`, `concat`, and `FiLM`.
 
-### Discretisation
+### Common Configuration Options
 
-Numerical values are converted into discrete tokens by binning:
+All modes support:
+- **`bin_values`**: Optionally bin values before embedding (default: False). For `discrete`, this is always True.
+- **`num_bins`**: Uniform number of bins for all numeric values (default: 100)
+- **`bin_mapping_func`**: Custom binning function for concept-specific strategies (overrides `num_bins`)
+- **`value_loss_weight`**: Weight for value prediction loss during pretraining (default: 1.0)
 
-- **Binning Process**: Continuous numeric values are divided into bins, with each bin represented as a discrete token in the vocabulary
-- **Training**: These value tokens are included in the masked language modeling (MLM) pretraining task, using cross-entropy loss alongside concept tokens
-- **Configuration Options**:
-  - **Bin values**: Specify the bool whether the values will be binned. For discrete this will be automatically set to true. 
-  - **Default binning**: Specify a uniform number of bins for all numeric values (default: 100 bins)
-  - **Custom binning**: Provide a `bin_mapping` function to apply concept-specific binning strategies (e.g., different numbers of bins per lab test). This overrides `num_bins`
-  - **Prefix support**: Optionally add concept-specific prefixes to value codes (e.g., `LAB/VAL_45` vs `VITALS/VAL_120`)
+`discrete` mode additionally supports:
+- **`add_prefix`**: Add concept-specific prefixes to value codes (e.g., `LAB/VAL_45`)
+- **`separator_regex`**: Regex pattern to extract prefix from concept name
 
-### Configuration Example
+### Configuration Examples
 
+**Discrete**:
 ```yaml
 features:
   values:
     value_type: "discrete"
     value_creator_kwargs:
-      num_bins: 100  # Default number of bins
-      bin_mapping_func:  # Optional: custom binning function
+      num_bins: 100 # num_bins is overriden
+      bin_mapping_func:
         _target_: corebehrt.functional.features.values.power_bin_distance_mean
-      add_prefix: true  # Optional: add concept prefix to value codes
-      separator_regex: r"^([^/]+)/"  # Extract prefix from concept name
+      add_prefix: true
+      separator_regex: r"^([^/]+)/"
 ```
 
-This approach allows the model to learn representations of numerical measurements while maintaining compatibility with the discrete token-based architecture. 
-
-### Combined
-
-Numerical values are included as continuous numeric values through a separate embeddings layer:
-
-- **Value Processing**: Numeric values are preserved as continuous floats (optionally binned first) and passed through a dedicated value embedding layer alongside concept embeddings
-- **Training**: Values are included in the masked language modeling (MLM) pretraining task with a separate value prediction loss, allowing the model to learn both discrete concept representations and continuous value representations
-- **Configuration Options**:
-  - **Bin values**: Optionally bin values before embedding (default: False). When enabled, values are binned but remain as numeric inputs rather than discrete tokens
-  - **Default binning**: Specify a uniform number of bins for all numeric values (default: 100 bins)
-  - **Custom binning**: Provide a `bin_mapping` function to apply concept-specific binning strategies (e.g., different numbers of bins per lab test). This overrides `num_bins`
-  - **Value loss weight**: Control the weight of the value prediction loss during training (default: 1.0)
-  - **Learnable value weight**: Optionally make the value loss weight a learnable parameter, initialized at `value_loss_weight` (defaul: false)
-
-### Configuration Example
-
-#### create_data.yaml
+**Combined**:
 ```yaml
+# create_data.yaml
 features:
   values:
     value_type: "combined"
     value_creator_kwargs:
-      bin_values: True  # Optional: bin values before embedding
-      num_bins: 100  # Default number of bins
-      bin_mapping_func:  # Optional: custom binning function
-        _target_: corebehrt.functional.features.values.power_bin_distance_mean
-```
+      bin_values: false
 
-#### pretrain.yaml
-```yaml
+# pretrain.yaml
 model:
-  value_loss_weight: 1.0  # Weight for value prediction loss
-  learnable_value_weight: true  # Optional: make value_loss_weight learnable
+  value_loss_weight: 1.0
 ```
 
-This approach allows the model to learn both discrete concept representations and continuous value representations simultaneously, providing richer feature learning for downstream tasks.
+**Combined binning**:
+```yaml
+# create_data.yaml
+features:
+  values:
+    value_type: "combined"
+    value_creator_kwargs:
+      bin_values: true
+      bin_mapping_func:
+        _target_: corebehrt.functional.features.values.power_bin_distance_mean
+
+# pretrain.yaml
+model:
+  value_loss_weight: 1.0
+```
+
+**Concat / FiLM**:
+```yaml
+# create_data.yaml
+features:
+  values:
+    value_type: "concat"  # or "film"
+    value_creator_kwargs:
+      bin_values: false
+
+# pretrain.yaml
+model:
+  value_loss_weight: 1.0
+```

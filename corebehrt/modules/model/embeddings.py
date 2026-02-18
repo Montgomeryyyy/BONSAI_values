@@ -45,6 +45,7 @@ class EhrEmbeddings(nn.Module):
         abspos_scale: float = TIME2VEC_ABSPOS_SCALE,
         age_shift: float = TIME2VEC_AGE_SHIFT,
         abspos_shift: float = TIME2VEC_ABSPOS_SHIFT,
+        value_embedding_mode: str = None,
     ):
         super().__init__()
         self.LayerNorm = nn.LayerNorm(hidden_size)
@@ -55,7 +56,16 @@ class EhrEmbeddings(nn.Module):
         self.concept_embeddings = nn.Embedding(
             vocab_size, hidden_size, padding_idx=pad_token_id
         )
-        self.value_embeddings = ContinuousEmbedding(hidden_size)
+
+        self.value_embedding_mode = value_embedding_mode
+        if value_embedding_mode in ["film", "concat", "linear"]:
+            self.separate_value_embedding = True
+            self.value_embeddings = SeparateContinuousEmbedding(
+                hidden_size, value_embedding_mode
+            )
+        else:
+            self.separate_value_embedding = False
+            self.value_embeddings = ContinuousEmbedding(hidden_size)
 
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
         self.age_embeddings = Time2Vec(
@@ -76,11 +86,11 @@ class EhrEmbeddings(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor = None,  # concepts
+        values: torch.Tensor = None,
         segments: torch.LongTensor = None,
         age: torch.Tensor = None,
         abspos: torch.Tensor = None,
         inputs_embeds: torch.Tensor = None,
-        values: torch.Tensor = None,
     ) -> torch.Tensor:
         if not self._validate_inputs(
             input_ids, segments, age, abspos, inputs_embeds, values
@@ -90,8 +100,13 @@ class EhrEmbeddings(nn.Module):
             return inputs_embeds
 
         # Separate embedding for concepts and values
-        concept_embeddings = self.get_input_embeddings(input_ids, values)
-        embeddings = concept_embeddings
+        if not self.separate_value_embedding:
+            embeddings = self.get_combined_input_embeddings(input_ids, values)
+
+        else:
+            # Separate embedding for concepts and values
+            concept_embeddings = self.concept_embeddings(input_ids)
+            embeddings = self.value_embeddings(values, concept_embeddings)
 
         embeddings += self.segment_embeddings(segments)
         embeddings += self.age_embeddings(age)
@@ -117,7 +132,7 @@ class EhrEmbeddings(nn.Module):
             )
         return all(x is not None for x in [input_ids, segments, age, abspos, values])
 
-    def get_input_embeddings(
+    def get_combined_input_embeddings(
         self, input_ids: torch.LongTensor, values: torch.Tensor
     ) -> torch.Tensor:
         value_mask = ~torch.isnan(values)
@@ -159,6 +174,49 @@ class ContinuousEmbedding(nn.Module):
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         value_embed = self.value_layer(values.unsqueeze(-1))  # (B, T, H)
         return value_embed
+
+
+class SeparateContinuousEmbedding(nn.Module):
+    def __init__(self, hidden_size: int, value_embedding_mode: str = None):
+        super().__init__()
+        self.value_embedding_mode = value_embedding_mode
+        self.hidden_size = hidden_size
+
+        self.value_proj = nn.Sequential(
+            nn.Linear(1, hidden_size), nn.ReLU(), nn.Linear(hidden_size, hidden_size)
+        )
+
+        if self.value_embedding_mode == "film":
+            self.gamma_layer = nn.Linear(hidden_size, hidden_size)
+            self.beta_layer = nn.Linear(hidden_size, hidden_size)
+
+        elif self.value_embedding_mode == "concat":
+            self.concat_proj = nn.Linear(2 * hidden_size, hidden_size)
+
+    def forward(
+        self, values: torch.Tensor, concept_embeds: torch.Tensor
+    ) -> torch.Tensor:
+        mask = (~torch.isnan(values)).float().unsqueeze(-1)
+        # Replace NaN with 0 before projection to avoid NaN propagation
+        values_safe = torch.where(torch.isnan(values), torch.zeros_like(values), values)
+        value_embed = self.value_proj(values_safe.unsqueeze(-1)) * mask  # (B, T, H)
+
+        if self.value_embedding_mode == "film":
+            gamma = self.gamma_layer(concept_embeds)
+            beta = self.beta_layer(concept_embeds)
+            return (gamma * value_embed + beta) * mask + concept_embeds * (1 - mask)
+
+        elif self.value_embedding_mode == "concat":
+            combined = torch.cat([concept_embeds, value_embed], dim=-1)
+            return self.concat_proj(combined) * mask + concept_embeds * (1 - mask)
+
+        elif self.value_embedding_mode == "linear":
+            return value_embed
+
+        else:
+            raise ValueError(
+                f"Unknown value_embedding_mode: {self.value_embedding_mode}"
+            )
 
 
 class Time2Vec(torch.nn.Module):

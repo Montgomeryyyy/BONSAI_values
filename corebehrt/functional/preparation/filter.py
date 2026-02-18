@@ -153,7 +153,6 @@ def _append_predict_token(
     """
     Appends a predict token to the patient's data.
     """
-
     patient.concepts.append(predict_token_id)
     patient.abspos.append(float(censor_date))
     patient.segments.append(

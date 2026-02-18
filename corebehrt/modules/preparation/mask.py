@@ -28,7 +28,7 @@ class ConceptMasker:
                 [
                     token
                     for token in vocabulary
-                    if token.startswith("[") and token != VAL_TOKEN
+                    if token.startswith("[") and token != VAL_TOKEN  # hardcoded for now
                 ]
             )
             if ignore_special_tokens
@@ -77,4 +77,4 @@ class ConceptMasker:
         )
         concepts[indices_replace] = random_words[indices_replace]
 
-        return concepts, target
+        return concepts, target, indices_mask

@@ -14,7 +14,7 @@ logging:
   level: INFO
   path: ./outputs/logs
 paths:
-  data: ./tests/data/raw
+  data: ./example_data/correlated_MEDS_data
   features: ./outputs/features
   tokenized: ./outputs/tokenized
 tokenizer:

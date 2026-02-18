@@ -19,6 +19,7 @@ DEFAULT_VOCABULARY = {
     MASK_TOKEN: 4,
     VAL_TOKEN: 5,
 }
+VALUE_MASK_TOKEN = -1
 
 ### Columns ###
 PID_COL = "subject_id"
@@ -65,6 +66,7 @@ SEGMENT_FEAT = "segment"
 VALUE_FEAT = "numeric_value"
 ATTENTION_MASK = "attention_mask"
 TARGET = "target"
+TARGET_VALUE = "target_value"
 
 # combined outcomes
 COMBINATIONS = "combinations"

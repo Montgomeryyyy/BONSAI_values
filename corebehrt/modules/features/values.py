@@ -64,9 +64,9 @@ class ValueCreator:
             return ValueCreator.add_values_discrete(
                 concepts, bin_values, bin_mapping, num_bins, add_prefix, separator_regex
             )
-        elif value_type == "combined":
+        elif value_type in ["combined", "film", "concat", "linear"]:
             return ValueCreator.add_values_continuous(
-                concepts, bin_values, bin_mapping, num_bins
+                concepts, bin_values, bin_mapping, num_bins, mode=value_type
             )
         else:
             raise ValueError(f"Unsupported value type: {value_type}")
@@ -126,6 +126,7 @@ class ValueCreator:
         bin_values: bool = False,
         bin_mapping: dict = None,
         num_bins: int = 10,
+        mode: str = "combined",
     ) -> pd.DataFrame:
         """
         Add values for continuous mode (returns integers).
@@ -147,16 +148,17 @@ class ValueCreator:
         )
 
         # Create values dataframe structure
-        concepts, values = ValueCreator._create_values_dataframe(
-            concepts, add_val_token=True
-        )
-
-        if not values.empty:
-            concatted = pd.concat([concepts, values], ignore_index=True)
+        if mode == "combined":
+            concepts, values = ValueCreator._create_values_dataframe(
+                concepts, add_val_token=True
+            )
+            if not values.empty:
+                concatted = pd.concat([concepts, values], ignore_index=True)
+            else:
+                concatted = concepts
+            return concatted
         else:
-            concatted = concepts
-
-        return concatted
+            return concepts
 
     @staticmethod
     def bin(values: pd.Series, num_bins=100) -> pd.Series:

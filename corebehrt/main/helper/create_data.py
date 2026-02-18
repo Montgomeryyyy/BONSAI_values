@@ -307,7 +307,6 @@ def handle_numeric_values(
             add_prefix=values_cfg.get("add_prefix", False),
             separator_regex=values_cfg.get("separator_regex", None),
         )
-    return concepts.drop(columns=[VALUE_COL])
 
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
