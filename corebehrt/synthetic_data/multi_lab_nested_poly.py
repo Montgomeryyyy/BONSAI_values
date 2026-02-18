@@ -1095,7 +1095,7 @@ def main():
     print(f"Saved min-max normalized data to {normalized_filename}")
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(
+    _ = calculate_theoretical_performance(
         data, args.num_labs, coefficients, args.num_nested_polys, args.poly_degree
     )
 

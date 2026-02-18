@@ -9,14 +9,12 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 
@@ -169,7 +167,6 @@ def generate_n_lab_concepts(
         print(f"Using provided threshold: {actual_threshold:.6f}")
 
     # Second pass: assign risk based on calculated threshold
-    product_idx = 0
     for pid in pids_list:
         # Generate exactly N CLEAN lab values for each patient (no noise on individual labs)
         clean_lab_values = []
@@ -866,7 +863,7 @@ def main():
     print(f"Saved min-max normalized data to {normalized_filename}")
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(data, args.num_labs)
+    _ = calculate_theoretical_performance(data, args.num_labs)
 
 
 if __name__ == "__main__":

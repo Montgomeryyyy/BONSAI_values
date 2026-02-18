@@ -12,7 +12,6 @@ sys.path.append(str(Path(__file__).parent))
 
 from compute_theoretical_auc_from_data import (
     compute_theoretical_auc_from_data,
-    print_theoretical_auc_results,
 )
 
 

@@ -1,7 +1,5 @@
 import warnings
 import pandas as pd
-import numpy as np
-import uuid
 
 from corebehrt.constants.data import (
     ABSPOS_COL,
@@ -15,13 +13,9 @@ from corebehrt.constants.data import (
     PID_COL,
     SEGMENT_COL,
     TIMESTAMP_COL,
-    ADMISSION_ID_COL,
-    ADMISSION,
-    DISCHARGE,
     VALUE_COL,
 )
 from corebehrt.functional.utils.time import get_hours_since_epoch
-from corebehrt.functional.features.normalize import normalize_segments_series
 
 
 def create_abspos(concepts: pd.DataFrame) -> pd.DataFrame:

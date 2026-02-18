@@ -8,8 +8,7 @@ high-risk patients have exactly one switch between distributions.
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
-from typing import Dict, Tuple, Optional
+from typing import Dict
 from sklearn.metrics import roc_auc_score
 
 

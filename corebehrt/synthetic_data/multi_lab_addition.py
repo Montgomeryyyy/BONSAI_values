@@ -8,14 +8,12 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 
@@ -833,7 +831,7 @@ def main():
     print(f"Saved min-max normalized data to {normalized_filename}")
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(data, args.num_labs)
+    _ = calculate_theoretical_performance(data, args.num_labs)
 
 
 if __name__ == "__main__":

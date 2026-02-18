@@ -8,14 +8,12 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from theoretical_separation import (
     cohens_d,
     sweep_threshold_auc,
-    manual_mann_whitney_u,
     scipy_mann_whitney_u,
 )
 
@@ -880,7 +878,7 @@ def main():
     normalized_data.to_csv(normalized_filename, index=False)
 
     # Calculate theoretical performance
-    performance_metrics = calculate_theoretical_performance(
+    _ = calculate_theoretical_performance(
         data,
         args.low_risk_mean,
         args.low_risk_std,

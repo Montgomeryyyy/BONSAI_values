@@ -7,9 +7,8 @@ multi-lab switching scenarios.
 """
 
 import numpy as np
-import pandas as pd
 from scipy.stats import norm
-from typing import Dict, Tuple, Optional
+from typing import Dict
 
 
 def calculate_basic_distribution_auc(mean1: float, mean2: float, std: float) -> float:
@@ -59,25 +58,6 @@ def calculate_switch_detection_auc(
     """
     if std == 0:
         return 1.0 if mean1 != mean2 else 0.5
-
-    threshold = (mean1 + mean2) / 2
-
-    # Probability that a value from distribution 1 is below threshold
-    p1_below = norm.cdf((threshold - mean1) / std)
-
-    # Probability that a value from distribution 2 is above threshold
-    p2_above = 1 - norm.cdf((threshold - mean2) / std)
-
-    # Probability of detecting a switch from dist1 to dist2
-    p_switch_detected = p1_below * p2_above
-
-    # Probability of false switch detection (due to noise)
-    p_false_switch = (
-        2
-        * norm.pdf((threshold - mean1) / std)
-        * norm.pdf((threshold - mean2) / std)
-        * std
-    )
 
     # Calculate theoretical AUC based on switch detection probability
     if abs(mean1 - mean2) > 6 * std:  # Essentially no overlap

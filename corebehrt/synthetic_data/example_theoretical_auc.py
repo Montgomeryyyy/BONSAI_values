@@ -11,7 +11,6 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from theoretical_auc_calculator import (
-    calculate_comprehensive_theoretical_aucs,
     print_theoretical_auc_summary,
 )
 

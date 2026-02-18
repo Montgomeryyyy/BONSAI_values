@@ -8,16 +8,7 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
-from typing import Optional, List, Tuple
-import matplotlib.pyplot as plt
-import seaborn as sns
-import os
-from theoretical_separation import (
-    cohens_d,
-    sweep_threshold_auc,
-    manual_mann_whitney_u,
-    scipy_mann_whitney_u,
-)
+from typing import Optional, List
 from sklearn.metrics import roc_auc_score
 
 # Default parameters
@@ -138,7 +129,6 @@ def generate_multi_lab_concepts(
     pids_list: List[str],
     min_labs: int,
     max_labs: int,
-    switching_prob: float,
     patient_risk_map: dict,
 ) -> pd.DataFrame:
     """
@@ -149,7 +139,6 @@ def generate_multi_lab_concepts(
         pids_list: List of patient IDs
         min_labs: Minimum number of labs per patient
         max_labs: Maximum number of labs per patient
-        switching_prob: Probability of switching for high-risk patients
         patient_risk_map: Dictionary mapping patient_id to risk status (True=high_risk, False=low_risk)
 
     Returns:

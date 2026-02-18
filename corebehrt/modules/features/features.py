@@ -6,7 +6,6 @@ from corebehrt.functional.features.creators import (
     create_age_in_years,
     create_background,
     sort_features,
-    create_values,
 )
 from corebehrt.functional.features.exclude import exclude_event_nans
 from corebehrt.functional.setup.checks import check_features_columns
