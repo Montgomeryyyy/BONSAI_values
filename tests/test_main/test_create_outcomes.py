@@ -26,11 +26,7 @@ class TestCreateOutcomes(TestMainScript):
                 "outcomes": {
                     "TEST_OUTCOME": {
                         "type": ["code"],
-<<<<<<< HEAD
                         "match": [["D0", "D1"]],
-=======
-                        "match": [["D01"]],
->>>>>>> 8a529b8e (more synth)
                         "exclude": ["D437"],
                         "match_how": "startswith",
                         "case_sensitive": True,

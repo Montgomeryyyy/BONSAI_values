@@ -181,7 +181,9 @@ class MLMDataset(Dataset):
         patient = self.patients[index]
         concepts = torch.tensor(patient.concepts)
         values = torch.tensor(patient.values)
-        masked_concepts, target, indices_mask = self.masker.mask_patient_concepts(concepts)
+        masked_concepts, target, indices_mask = self.masker.mask_patient_concepts(
+            concepts
+        )
 
         # concepts = torch.tensor(patient.concepts, dtype=torch.long)
         # values = torch.tensor(patient.values, dtype=torch.float)

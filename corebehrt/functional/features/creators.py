@@ -47,6 +47,7 @@ def create_values(concepts: pd.DataFrame) -> pd.DataFrame:
     concepts[VALUE_COL] = concepts[VALUE_COL].astype(float)
     return concepts
 
+
 def create_age_in_years(concepts: pd.DataFrame) -> pd.DataFrame:
     """
     Compute age in years for each row in concepts

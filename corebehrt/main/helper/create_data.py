@@ -196,8 +196,6 @@ def create_and_save_features(cfg, splits, logger) -> None:
                 schema=pa.schema(FEATURES_SCHEMA),
             )
 
-            print(features.head(20))
-
         # Log final statistics for this split
         logger.info(f"Total concepts loaded: {total_concepts_loaded}")
         logger.info(f"Total concepts after aggregation: {total_concepts_after_agg}")
@@ -310,7 +308,6 @@ def handle_numeric_values(
             separator_regex=values_cfg.get("separator_regex", None),
         )
 
-        # TODO: add both support for discrete and continuous values
 
 def create_row_id(concepts: pd.DataFrame) -> pd.DataFrame:
     """Assign segment numbers to each row within each PID group."""

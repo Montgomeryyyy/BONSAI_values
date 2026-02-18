@@ -1,5 +1,5 @@
 """
-Generate synthetic data with multiple lab values where positive patients are determined 
+Generate synthetic data with multiple lab values where positive patients are determined
 by an addition equation: LAB1 + LAB2 > threshold.
 Based on the multi_lab_frequency.py structure with concept relationships.
 """
@@ -31,7 +31,7 @@ NOISE_LEVEL = 0.1  # 10% noise applied to the sum of lab values for realistic AU
 
 # Lab value distributions - same distribution for all labs by default
 LAB_MEAN = 0.3  # Mean for all labs
-LAB_STD = 0.1   # Std for all labs
+LAB_STD = 0.1  # Std for all labs
 
 # Diagnosis timing parameters
 DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
@@ -87,7 +87,13 @@ def generate_lab_value(lab_name: str, lab_value_info: dict) -> Optional[float]:
     return None
 
 
-def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_labs: int, lab_value_info: dict, noise_level: float = 0.0) -> pd.DataFrame:
+def generate_n_lab_concepts_batch(
+    pids_batch: List[str],
+    threshold: float,
+    num_labs: int,
+    lab_value_info: dict,
+    noise_level: float = 0.0,
+) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for a batch of patients.
     Memory-optimized version that processes patients in smaller batches.
@@ -103,23 +109,25 @@ def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_l
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
     """
     records = []
-    
+
     # Pre-generate all lab values for the batch (more memory efficient)
     batch_size = len(pids_batch)
-    
+
     # Generate lab values for all patients in batch
     lab_values_batch = np.zeros((batch_size, num_labs))
     for i in range(num_labs):
-        lab_concept = f"S/LAB{i+1}"
+        lab_concept = f"S/LAB{i + 1}"
         lab_info = lab_value_info[lab_concept]["distribution"]
         if lab_info["dist"] == "normal":
-            lab_values_batch[:, i] = np.random.normal(lab_info["mean"], lab_info["std"], batch_size)
+            lab_values_batch[:, i] = np.random.normal(
+                lab_info["mean"], lab_info["std"], batch_size
+            )
         elif lab_info["dist"] == "uniform":
             lab_values_batch[:, i] = np.random.choice(lab_info["range"], batch_size)
-    
+
     # Calculate sums and determine risk for all patients at once
     lab_sums = np.sum(lab_values_batch, axis=1)
-    
+
     # Add noise to the sum if specified
     if noise_level > 0:
         # Add multiplicative noise to the sum (keeps values positive)
@@ -127,37 +135,50 @@ def generate_n_lab_concepts_batch(pids_batch: List[str], threshold: float, num_l
         noisy_lab_sums = lab_sums * noise_factor
     else:
         noisy_lab_sums = lab_sums
-    
+
     is_high_risk_batch = noisy_lab_sums > threshold
-    
+
     # Build records for the batch
     for batch_idx, pid in enumerate(pids_batch):
         condition = "high_risk" if is_high_risk_batch[batch_idx] else "low_risk"
-        
+
         # Add lab records
         for i in range(num_labs):
-            records.append({
-                "PID": pid,
-                "CONCEPT": f"S/LAB{i+1}",
-                "RESULT": lab_values_batch[batch_idx, i],
-                "LAB_INDEX": i,
-                "CONDITION": condition
-            })
-        
+            records.append(
+                {
+                    "PID": pid,
+                    "CONCEPT": f"S/LAB{i + 1}",
+                    "RESULT": lab_values_batch[batch_idx, i],
+                    "LAB_INDEX": i,
+                    "CONDITION": condition,
+                }
+            )
+
         # Add diagnosis record
-        diag_concept = "S/DIAG_POSITIVE" if is_high_risk_batch[batch_idx] else "S/DIAG_NEGATIVE"
-        records.append({
-            "PID": pid,
-            "CONCEPT": diag_concept,
-            "RESULT": 1.0,
-            "LAB_INDEX": -1,
-            "CONDITION": condition
-        })
-    
+        diag_concept = (
+            "S/DIAG_POSITIVE" if is_high_risk_batch[batch_idx] else "S/DIAG_NEGATIVE"
+        )
+        records.append(
+            {
+                "PID": pid,
+                "CONCEPT": diag_concept,
+                "RESULT": 1.0,
+                "LAB_INDEX": -1,
+                "CONDITION": condition,
+            }
+        )
+
     return pd.DataFrame(records)
 
 
-def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: int, lab_value_info: dict, batch_size: int = 1000, noise_level: float = 0.0) -> pd.DataFrame:
+def generate_n_lab_concepts(
+    pids_list: List[str],
+    threshold: float,
+    num_labs: int,
+    lab_value_info: dict,
+    batch_size: int = 1000,
+    noise_level: float = 0.0,
+) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
     Memory-optimized version that processes patients in batches.
@@ -175,34 +196,42 @@ def generate_n_lab_concepts(pids_list: List[str], threshold: float, num_labs: in
     """
     all_records = []
     total_patients = len(pids_list)
-    
+
     print(f"Processing {total_patients} patients in batches of {batch_size}")
-    
+
     # Process patients in batches
     for i in range(0, total_patients, batch_size):
         batch_end = min(i + batch_size, total_patients)
         pids_batch = pids_list[i:batch_end]
-        
-        print(f"Processing batch {i//batch_size + 1}/{(total_patients + batch_size - 1)//batch_size} ({len(pids_batch)} patients)")
-        
+
+        print(
+            f"Processing batch {i // batch_size + 1}/{(total_patients + batch_size - 1) // batch_size} ({len(pids_batch)} patients)"
+        )
+
         # Generate data for this batch
-        batch_df = generate_n_lab_concepts_batch(pids_batch, threshold, num_labs, lab_value_info, noise_level)
+        batch_df = generate_n_lab_concepts_batch(
+            pids_batch, threshold, num_labs, lab_value_info, noise_level
+        )
         all_records.append(batch_df)
-        
+
         # Clear memory
         del batch_df
-    
+
     # Combine all batches
     print("Combining all batches...")
     result_df = pd.concat(all_records, ignore_index=True)
     del all_records  # Clear memory
-    
+
     return result_df
 
 
 def generate_timestamps(
-    pids_list: List[str], concepts: List[str], lab_indices: List[int], 
-    diag_min_days: int = DIAG_MIN_DAYS, diag_max_days: int = DIAG_MAX_DAYS, patient_df: pd.DataFrame = None
+    pids_list: List[str],
+    concepts: List[str],
+    lab_indices: List[int],
+    diag_min_days: int = DIAG_MIN_DAYS,
+    diag_max_days: int = DIAG_MAX_DAYS,
+    patient_df: pd.DataFrame = None,
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
@@ -222,11 +251,13 @@ def generate_timestamps(
     timestamps = []
     concept_timestamps = {}  # Store timestamps for each concept per patient
 
-    for i, (pid, concept, lab_index) in enumerate(zip(pids_list, concepts, lab_indices)):
+    for i, (pid, concept, lab_index) in enumerate(
+        zip(pids_list, concepts, lab_indices)
+    ):
         # Initialize patient's concept timestamps if not exists
         if pid not in concept_timestamps:
             concept_timestamps[pid] = {}
-            
+
             # Get patient birth and death dates from patient_df
             if patient_df is not None:
                 # Check if patient exists in patient_df
@@ -234,41 +265,50 @@ def generate_timestamps(
                 if len(patient_matches) > 0:
                     patient_info = patient_matches.iloc[0]
                     birthdate = pd.to_datetime(patient_info["birthdate"])
-                    
+
                     # Handle deathdate - if NaT, use a default future date
                     deathdate = pd.to_datetime(patient_info["deathdate"])
                     if pd.isna(deathdate):
                         deathdate = pd.Timestamp(year=2025, month=1, day=1)
-                        
+
                     # Ensure deathdate is after birthdate
                     if deathdate <= birthdate:
                         deathdate = birthdate + pd.Timedelta(days=1)
-                        
+
                     # Generate a random start time for this patient between birth and death
                     time_diff = (deathdate - birthdate).total_seconds()
                     random_seconds = np.random.randint(0, int(time_diff))
-                    concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(
+                        seconds=random_seconds
+                    )
                 else:
                     # Patient not found in patient_df, use default time range
                     start_time = pd.Timestamp(year=2016, month=1, day=1)
                     end_time = pd.Timestamp(year=2025, month=1, day=1)
                     time_diff = (end_time - start_time).total_seconds()
                     random_seconds = np.random.randint(0, int(time_diff))
-                    concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(
+                        seconds=random_seconds
+                    )
             else:
                 # Fallback to default time range if no patient_df provided
                 start_time = pd.Timestamp(year=2016, month=1, day=1)
                 end_time = pd.Timestamp(year=2025, month=1, day=1)
                 time_diff = (end_time - start_time).total_seconds()
                 random_seconds = np.random.randint(0, int(time_diff))
-                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(
+                    seconds=random_seconds
+                )
 
         # Handle timestamps based on concept type
         if concept in ["S/DIAG_POSITIVE", "S/DIAG_NEGATIVE"]:
             # Diagnosis concepts come after the last lab (configurable days after last lab)
             # Find the latest lab timestamp for this patient
-            lab_timestamps = [ts for lab_concept, ts in concept_timestamps[pid].items() 
-                            if lab_concept.startswith("S/LAB") and lab_concept != "start_time"]
+            lab_timestamps = [
+                ts
+                for lab_concept, ts in concept_timestamps[pid].items()
+                if lab_concept.startswith("S/LAB") and lab_concept != "start_time"
+            ]
             if lab_timestamps:
                 # Use the latest lab timestamp as base
                 base_timestamp = max(lab_timestamps)
@@ -304,13 +344,13 @@ def generate_synthetic_data(
     diag_max_days: int = DIAG_MAX_DAYS,
     patient_df: pd.DataFrame = None,
     batch_size: int = 1000,
-    noise_level: float = NOISE_LEVEL
+    noise_level: float = NOISE_LEVEL,
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
     Patient risk is determined by (sum of all labs + noise) > threshold.
     Noise is applied to the sum, not to individual lab values.
-    
+
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
         threshold: Threshold for (sum of all labs + noise) > threshold equation
@@ -321,31 +361,35 @@ def generate_synthetic_data(
         patient_df: DataFrame containing patient information with birthdate and deathdate columns
         batch_size: Number of patients to process at once
         noise_level: Amount of noise to add to the sum of lab values
-        
+
     Returns:
         pd.DataFrame: Generated synthetic data
     """
     # Get patient IDs from input data
     pids_list = list(input_data["subject_id"].unique())
-    
+
     # Generate concepts and lab values
-    concepts_data = generate_n_lab_concepts(pids_list, threshold, num_labs, lab_value_info, batch_size, noise_level)
+    concepts_data = generate_n_lab_concepts(
+        pids_list, threshold, num_labs, lab_value_info, batch_size, noise_level
+    )
 
     # Create final DataFrame - match multi_lab_frequency.py structure exactly
-    data = pd.DataFrame({
-        "subject_id": concepts_data["PID"],
-        "code": concepts_data["CONCEPT"],
-        "numeric_value": concepts_data["RESULT"].astype(float),
-    })
+    data = pd.DataFrame(
+        {
+            "subject_id": concepts_data["PID"],
+            "code": concepts_data["CONCEPT"],
+            "numeric_value": concepts_data["RESULT"].astype(float),
+        }
+    )
 
     # Generate timestamps for each record
     data["time"] = generate_timestamps(
-        data["subject_id"].tolist(), 
+        data["subject_id"].tolist(),
         data["code"].tolist(),
         concepts_data["LAB_INDEX"].tolist(),
         diag_min_days,
         diag_max_days,
-        patient_df
+        patient_df,
     )
 
     return data
@@ -360,7 +404,9 @@ def print_statistics(data: pd.DataFrame, num_labs: int) -> None:
         num_labs: Number of labs per patient
     """
     # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
+    positive_patients = set(
+        data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique()
+    )
     data["is_positive"] = data["subject_id"].isin(positive_patients)
     positive_mask = data["is_positive"]
 
@@ -380,42 +426,62 @@ def print_statistics(data: pd.DataFrame, num_labs: int) -> None:
 
     # Count labs per patient (should be exactly num_labs for all patients)
     all_lab_mask = data["code"].str.startswith("S/LAB")
-    positive_labs_per_patient = data[all_lab_mask & positive_mask].groupby("subject_id").size()
-    negative_labs_per_patient = data[all_lab_mask & ~positive_mask].groupby("subject_id").size()
+    positive_labs_per_patient = (
+        data[all_lab_mask & positive_mask].groupby("subject_id").size()
+    )
+    negative_labs_per_patient = (
+        data[all_lab_mask & ~positive_mask].groupby("subject_id").size()
+    )
 
     print(f"\nLab frequency statistics (each patient has exactly {num_labs} labs):")
-    print(f"High-risk patients - Labs per patient: {positive_labs_per_patient.mean():.1f} (should be {num_labs}.0)")
-    print(f"Low-risk patients - Labs per patient: {negative_labs_per_patient.mean():.1f} (should be {num_labs}.0)")
-    
+    print(
+        f"High-risk patients - Labs per patient: {positive_labs_per_patient.mean():.1f} (should be {num_labs}.0)"
+    )
+    print(
+        f"Low-risk patients - Labs per patient: {negative_labs_per_patient.mean():.1f} (should be {num_labs}.0)"
+    )
+
     # Calculate addition statistics (sum of all labs)
     lab_data_dict = {}
     for i in range(1, num_labs + 1):
-        lab_data_dict[f"LAB{i}"] = data[data["code"] == f"S/LAB{i}"].groupby("subject_id")["numeric_value"].first()
-    
+        lab_data_dict[f"LAB{i}"] = (
+            data[data["code"] == f"S/LAB{i}"]
+            .groupby("subject_id")["numeric_value"]
+            .first()
+        )
+
     # Calculate sum of all labs for each patient
     addition_scores = sum(lab_data_dict.values())
-    
+
     positive_addition = addition_scores[addition_scores.index.isin(positive_patients)]
     negative_addition = addition_scores[~addition_scores.index.isin(positive_patients)]
-    
+
     print(f"\nAddition equation statistics (sum of all {num_labs} labs):")
     print(f"High-risk patients - Mean: {positive_addition.mean():.3f}")
     print(f"High-risk patients - Std: {positive_addition.std():.3f}")
     print(f"Low-risk patients - Mean: {negative_addition.mean():.3f}")
     print(f"Low-risk patients - Std: {negative_addition.std():.3f}")
     print(f"Threshold: {ADDITION_THRESHOLD}")
-    
+
     # Verify that every patient has a diagnosis
     total_patients = data["subject_id"].nunique()
-    patients_with_positive_diag = data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].nunique()
-    patients_with_negative_diag = data[data["code"] == "S/DIAG_NEGATIVE"]["subject_id"].nunique()
-    
+    patients_with_positive_diag = data[data["code"] == "S/DIAG_POSITIVE"][
+        "subject_id"
+    ].nunique()
+    patients_with_negative_diag = data[data["code"] == "S/DIAG_NEGATIVE"][
+        "subject_id"
+    ].nunique()
+
     print(f"\nDiagnosis coverage:")
     print(f"Total patients: {total_patients}")
     print(f"Patients with S/DIAG_POSITIVE: {patients_with_positive_diag}")
     print(f"Patients with S/DIAG_NEGATIVE: {patients_with_negative_diag}")
-    print(f"Total with diagnosis: {patients_with_positive_diag + patients_with_negative_diag}")
-    print(f"Coverage: {(patients_with_positive_diag + patients_with_negative_diag) / total_patients * 100:.1f}%")
+    print(
+        f"Total with diagnosis: {patients_with_positive_diag + patients_with_negative_diag}"
+    )
+    print(
+        f"Coverage: {(patients_with_positive_diag + patients_with_negative_diag) / total_patients * 100:.1f}%"
+    )
 
 
 def create_distribution_plot(
@@ -430,8 +496,10 @@ def create_distribution_plot(
         num_labs: Number of labs per patient
     """
     # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
-    
+    positive_patients = set(
+        data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique()
+    )
+
     # Create subplots - show first 3 labs and addition scores
     n_cols = min(4, num_labs + 1)  # Show up to 3 labs + addition scores
     fig, axes = plt.subplots(1, n_cols, figsize=(6 * n_cols, 6))
@@ -440,36 +508,54 @@ def create_distribution_plot(
 
     # Plot individual lab distributions (up to 3 labs)
     for i in range(min(3, num_labs)):
-        lab_mask = data["code"] == f"S/LAB{i+1}"
+        lab_mask = data["code"] == f"S/LAB{i + 1}"
         lab_data = data[lab_mask].copy()
         lab_data["is_positive"] = lab_data["subject_id"].isin(positive_patients)
-        
+
         positive_values = lab_data[lab_data["is_positive"]]["numeric_value"]
         negative_values = lab_data[~lab_data["is_positive"]]["numeric_value"]
 
-        axes[i].hist(positive_values, bins=30, alpha=0.7, label="High-Risk Patients", color="red")
-        axes[i].hist(negative_values, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue")
-        axes[i].set_xlabel(f"LAB{i+1} Value")
+        axes[i].hist(
+            positive_values, bins=30, alpha=0.7, label="High-Risk Patients", color="red"
+        )
+        axes[i].hist(
+            negative_values, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue"
+        )
+        axes[i].set_xlabel(f"LAB{i + 1} Value")
         axes[i].set_ylabel("Count")
-        axes[i].set_title(f"Distribution of LAB{i+1} Values")
+        axes[i].set_title(f"Distribution of LAB{i + 1} Values")
         axes[i].legend()
         axes[i].grid(True, alpha=0.3)
 
     # Plot addition scores (sum of all labs)
     lab_data_dict = {}
     for i in range(1, num_labs + 1):
-        lab_data_dict[f"LAB{i}"] = data[data["code"] == f"S/LAB{i}"].groupby("subject_id")["numeric_value"].first()
-    
+        lab_data_dict[f"LAB{i}"] = (
+            data[data["code"] == f"S/LAB{i}"]
+            .groupby("subject_id")["numeric_value"]
+            .first()
+        )
+
     # Calculate sum of all labs for each patient
     addition_scores = sum(lab_data_dict.values())
-    
+
     positive_addition = addition_scores[addition_scores.index.isin(positive_patients)]
     negative_addition = addition_scores[~addition_scores.index.isin(positive_patients)]
 
     ax_idx = min(3, num_labs)  # Index for addition scores plot
-    axes[ax_idx].hist(positive_addition, bins=30, alpha=0.7, label="High-Risk Patients", color="red")
-    axes[ax_idx].hist(negative_addition, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue")
-    axes[ax_idx].axvline(ADDITION_THRESHOLD, color='black', linestyle='--', linewidth=2, label=f'Threshold: {ADDITION_THRESHOLD}')
+    axes[ax_idx].hist(
+        positive_addition, bins=30, alpha=0.7, label="High-Risk Patients", color="red"
+    )
+    axes[ax_idx].hist(
+        negative_addition, bins=30, alpha=0.7, label="Low-Risk Patients", color="blue"
+    )
+    axes[ax_idx].axvline(
+        ADDITION_THRESHOLD,
+        color="black",
+        linestyle="--",
+        linewidth=2,
+        label=f"Threshold: {ADDITION_THRESHOLD}",
+    )
     axes[ax_idx].set_xlabel(f"Sum of All {num_labs} Labs")
     axes[ax_idx].set_ylabel("Number of Patients")
     axes[ax_idx].set_title(f"Distribution of Addition Scores (Sum of {num_labs} Labs)")
@@ -491,24 +577,24 @@ def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int) -> dict
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
-        
+
     Returns:
         dict: Dictionary containing performance metrics
     """
     # Calculate addition-based AUC
     addition_auc = calculate_addition_auc(data, num_labs)
-    
+
     # Calculate other metrics
     sweep_auc = sweep_threshold_auc(data)
     scipy_mann_whitney_u_auc = scipy_mann_whitney_u(data)
     cohens_d_metric = cohens_d(data)
-    
+
     print("\nTheoretical performance:")
     print(f"Addition-based AUC (clean sum vs noisy ground truth): {addition_auc}")
     print(f"Sweep AUC (LAB1 only): {sweep_auc}")
     print(f"Scipy Mann-Whitney U (LAB1 only): {scipy_mann_whitney_u_auc}")
     print(f"Cohen's d (LAB1 only): {cohens_d_metric}")
-    
+
     return {
         "addition_auc": addition_auc,
         "sweep_auc": sweep_auc,
@@ -520,30 +606,37 @@ def calculate_theoretical_performance(data: pd.DataFrame, num_labs: int) -> dict
 def calculate_addition_auc(data: pd.DataFrame, num_labs: int) -> float:
     """
     Calculate AUC for detecting high-risk patients based on sum of all labs > threshold.
-    
+
     Note: This calculates the theoretical maximum AUC that a perfect model could achieve
     using the clean lab values to predict the noisy ground truth labels.
-    
+
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
-        
+
     Returns:
         float: AUC for addition-based detection
     """
     # Get lab values for each patient (these are clean, no noise)
     lab_data_dict = {}
     for i in range(1, num_labs + 1):
-        lab_data_dict[f"LAB{i}"] = data[data['code'] == f'S/LAB{i}'].groupby("subject_id")["numeric_value"].first()
-    
+        lab_data_dict[f"LAB{i}"] = (
+            data[data["code"] == f"S/LAB{i}"]
+            .groupby("subject_id")["numeric_value"]
+            .first()
+        )
+
     # Get patient risks (these are based on noisy sum + threshold)
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
+    positive_patients = set(
+        data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique()
+    )
     patient_risks = list(lab_data_dict.values())[0].index.isin(positive_patients)
-    
+
     # Calculate sum of all labs for each patient (clean sum)
     addition_scores = sum(lab_data_dict.values())
-    
+
     from sklearn.metrics import roc_auc_score
+
     auc = roc_auc_score(patient_risks, addition_scores)
     return auc
 
@@ -623,21 +716,27 @@ def main():
             patient_df = pd.read_parquet(args.patient_info_path)
             print(f"Loaded patient info from {args.patient_info_path}")
             print(f"Patient info contains {len(patient_df)} patients")
-            
+
             # Check for patient ID overlap
             input_patients = set(input_data["subject_id"].unique())
             patient_info_patients = set(patient_df["subject_id"].unique())
             overlap = input_patients.intersection(patient_info_patients)
-            
+
             print(f"Input data has {len(input_patients)} unique patients")
             print(f"Patient info has {len(patient_info_patients)} unique patients")
-            print(f"Overlap: {len(overlap)} patients ({len(overlap)/len(input_patients)*100:.1f}%)")
-            
+            print(
+                f"Overlap: {len(overlap)} patients ({len(overlap) / len(input_patients) * 100:.1f}%)"
+            )
+
             if len(overlap) == 0:
-                print("Warning: No patient ID overlap between input data and patient info!")
+                print(
+                    "Warning: No patient ID overlap between input data and patient info!"
+                )
                 print("Will use default timestamp generation for all patients")
         except FileNotFoundError:
-            print(f"Warning: Could not find patient info file at {args.patient_info_path}")
+            print(
+                f"Warning: Could not find patient info file at {args.patient_info_path}"
+            )
             print("Using default timestamp generation")
 
     print("Initial data:")
@@ -650,16 +749,26 @@ def main():
 
     print(f"\nGenerating synthetic data with:")
     print(f"  - {input_data['subject_id'].nunique()} patients")
-    print(f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})")
+    print(
+        f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})"
+    )
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
-    print(f"  - Addition threshold: (sum of all {args.num_labs} labs + noise) > {args.threshold}")
+    print(
+        f"  - Addition threshold: (sum of all {args.num_labs} labs + noise) > {args.threshold}"
+    )
     print(f"  - Individual lab values are clean (no noise)")
-    print(f"  - Multiplicative noise ({args.noise_level*100:.0f}%) is applied to the sum of lab values")
-    print(f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab")
+    print(
+        f"  - Multiplicative noise ({args.noise_level * 100:.0f}%) is applied to the sum of lab values"
+    )
+    print(
+        f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab"
+    )
 
     # Generate save name dynamically
-    noise_suffix = f"_noise{int(args.noise_level*100)}" if args.noise_level > 0 else ""
-    save_name = f"n_lab_addition_{args.num_labs}labs_mean{int(LAB_MEAN*100)}p{int(LAB_STD*100)}{noise_suffix}_n{N}"
+    noise_suffix = (
+        f"_noise{int(args.noise_level * 100)}" if args.noise_level > 0 else ""
+    )
+    save_name = f"n_lab_addition_{args.num_labs}labs_mean{int(LAB_MEAN * 100)}p{int(LAB_STD * 100)}{noise_suffix}_n{N}"
 
     # Generate lab value info dynamically
     lab_value_info = {}
@@ -682,7 +791,7 @@ def main():
         args.diag_max_days,
         patient_df,
         args.batch_size,
-        args.noise_level
+        args.noise_level,
     )
 
     print("\nGenerated data:")
@@ -699,17 +808,17 @@ def main():
 
     # Min-max normalize numeric_value for labs separately for each lab and save as a separate file
     normalized_data = data.copy()
-    
+
     # Normalize each lab separately
     for i in range(1, args.num_labs + 1):
         lab_code = f"S/LAB{i}"
         lab_mask = normalized_data["code"] == lab_code
-        
+
         if lab_mask.any():
             lab_values = normalized_data.loc[lab_mask, "numeric_value"]
             min_val = lab_values.min()
             max_val = lab_values.max()
-            
+
             if max_val > min_val:
                 # Apply min-max normalization: (value - min) / (max - min)
                 normalized_data.loc[lab_mask, "numeric_value"] = (
@@ -718,7 +827,7 @@ def main():
             else:
                 # If all values are the same, set to 0.0
                 normalized_data.loc[lab_mask, "numeric_value"] = 0.0
-    
+
     normalized_filename = write_dir / f"{save_name}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
     print(f"Saved min-max normalized data to {normalized_filename}")

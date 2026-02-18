@@ -26,19 +26,10 @@ model:
   hidden_size: 96
   intermediate_size: 64
   is_causal: false
-<<<<<<< HEAD
-  learnable_value_weight: true
-=======
->>>>>>> 8a529b8e (more synth)
   max_position_embeddings: 512
   num_attention_heads: 3
   num_hidden_layers: 3
   type_vocab_size: 1024
-<<<<<<< HEAD
-  value_embedding_mode: film
-  value_loss_weight: 1.0
-=======
->>>>>>> 8a529b8e (more synth)
 optimizer:
   eps: 1.0e-06
   lr: 0.0005
@@ -47,13 +38,8 @@ paths:
   prepared_data: ./outputs/pretraining/processed_data/
 scheduler:
   _target_: transformers.get_linear_schedule_with_warmup
-<<<<<<< HEAD
-  num_training_steps: 29
-  num_warmup_steps: 19
-=======
   num_training_steps: 592
   num_warmup_steps: 395
->>>>>>> 8a529b8e (more synth)
 trainer_args:
   batch_size: 32
   early_stopping: null

@@ -46,7 +46,7 @@ class EhrEmbeddings(nn.Module):
         abspos_scale: float = TIME2VEC_ABSPOS_SCALE,
         age_shift: float = TIME2VEC_AGE_SHIFT,
         abspos_shift: float = TIME2VEC_ABSPOS_SHIFT,
-        value_embedding_mode: str = None
+        value_embedding_mode: str = None,
     ):
         super().__init__()
         self.LayerNorm = nn.LayerNorm(hidden_size)
@@ -59,14 +59,13 @@ class EhrEmbeddings(nn.Module):
         )
 
         self.value_embedding_mode = value_embedding_mode
-        print("value_embedding_mode in embedding ehr", value_embedding_mode)
         if value_embedding_mode in ["film", "concat", "linear"]:
-            print("separate continuous embedding")
             self.separate_value_embedding = True
-            self.value_embeddings = SeparateContinuousEmbedding(hidden_size, value_embedding_mode)
+            self.value_embeddings = SeparateContinuousEmbedding(
+                hidden_size, value_embedding_mode
+            )
         else:
             self.separate_value_embedding = False
-            print("continuous embedding")
             self.value_embeddings = ContinuousEmbedding(hidden_size)
 
         self.segment_embeddings = nn.Embedding(type_vocab_size, hidden_size)
@@ -103,13 +102,12 @@ class EhrEmbeddings(nn.Module):
 
         # Separate embedding for concepts and values
         if not self.separate_value_embedding:
-            concept_embeddings = self.get_combined_input_embeddings(input_ids, values)
-            embeddings = concept_embeddings
-        
+            embeddings = self.get_combined_input_embeddings(input_ids, values)
+
         else:
             # Separate embedding for concepts and values
             concept_embeddings = self.concept_embeddings(input_ids)
-            embeddings = self.get_separate_input_embeddings(values, concept_embeddings)
+            embeddings = self.value_embeddings(values, concept_embeddings)
 
         embeddings += self.segment_embeddings(segments)
         embeddings += self.age_embeddings(age)
@@ -163,10 +161,6 @@ class EhrEmbeddings(nn.Module):
         out[value_mask] = float_embeddings
 
         return out
-    
-    def get_separate_input_embeddings(self, values: torch.Tensor, concept_embeddings: torch.Tensor) -> torch.Tensor:
-        embeddings = self.value_embeddings(values, concept_embeddings)
-        return embeddings
 
 
 class ContinuousEmbedding(nn.Module):
@@ -190,9 +184,7 @@ class SeparateContinuousEmbedding(nn.Module):
         self.hidden_size = hidden_size
 
         self.value_proj = nn.Sequential(
-            nn.Linear(1, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size)
+            nn.Linear(1, hidden_size), nn.ReLU(), nn.Linear(hidden_size, hidden_size)
         )
 
         if self.value_embedding_mode == "film":
@@ -201,9 +193,10 @@ class SeparateContinuousEmbedding(nn.Module):
 
         elif self.value_embedding_mode == "concat":
             self.concat_proj = nn.Linear(2 * hidden_size, hidden_size)
-        
 
-    def forward(self, values: torch.Tensor, concept_embeds: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, values: torch.Tensor, concept_embeds: torch.Tensor
+    ) -> torch.Tensor:
         mask = (~torch.isnan(values)).float().unsqueeze(-1)
         # Replace NaN with 0 before projection to avoid NaN propagation
         values_safe = torch.where(torch.isnan(values), torch.zeros_like(values), values)
@@ -222,7 +215,10 @@ class SeparateContinuousEmbedding(nn.Module):
             return value_embed
 
         else:
-            raise ValueError(f"Unknown value_embedding_mode: {self.value_embedding_mode}")
+            raise ValueError(
+                f"Unknown value_embedding_mode: {self.value_embedding_mode}"
+            )
+
 
 class Time2Vec(torch.nn.Module):
     """Time2Vec embedding layer that combines linear and periodic components.

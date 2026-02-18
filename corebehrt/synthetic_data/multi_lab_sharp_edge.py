@@ -1,5 +1,5 @@
 """
-Generate synthetic data with multiple lab values where high-risk patients switch between 
+Generate synthetic data with multiple lab values where high-risk patients switch between
 distributions, while low-risk patients only have labs from one distribution.
 Based on the simulate_synthetic_labs.py structure with concept relationships.
 """
@@ -68,7 +68,9 @@ CONCEPT_RELATIONSHIPS = {
         "related_concepts": {
             "S/DIAG_POSITIVE": {
                 "prob": 1,  # 100% chance of getting diagnosis if high-risk
-                "conditions": ["high_risk"],  # Only high-risk patients get positive diagnosis
+                "conditions": [
+                    "high_risk"
+                ],  # Only high-risk patients get positive diagnosis
                 "time_relationship": {
                     "type": "after",  # Diagnosis comes after labs
                     "min_days": 10,
@@ -77,13 +79,15 @@ CONCEPT_RELATIONSHIPS = {
             },
             "S/DIAG_NEGATIVE": {
                 "prob": 1,  # 100% chance of getting diagnosis if low-risk
-                "conditions": ["low_risk"],  # Only low-risk patients get negative diagnosis
+                "conditions": [
+                    "low_risk"
+                ],  # Only low-risk patients get negative diagnosis
                 "time_relationship": {
                     "type": "after",  # Diagnosis comes after labs
                     "min_days": 10,
                     "max_days": 180,
                 },
-            }
+            },
         },
     },
 }
@@ -130,7 +134,13 @@ def generate_lab_value(lab_name: str, condition: str) -> Optional[float]:
     return None
 
 
-def generate_multi_lab_concepts(pids_list: List[str], min_labs: int, max_labs: int, switching_prob: float, patient_risk_map: dict) -> pd.DataFrame:
+def generate_multi_lab_concepts(
+    pids_list: List[str],
+    min_labs: int,
+    max_labs: int,
+    switching_prob: float,
+    patient_risk_map: dict,
+) -> pd.DataFrame:
     """
     Generate multiple lab concepts and values for a list of patient IDs.
     Based on the simulate_synthetic_labs.py structure.
@@ -161,46 +171,62 @@ def generate_multi_lab_concepts(pids_list: List[str], min_labs: int, max_labs: i
                     if base_concept in LAB_VALUE_INFO:
                         # Generate multiple lab values
                         n_labs = np.random.randint(min_labs, max_labs + 1)
-                        
+
                         if condition == "high_risk":
                             # High-risk patients: switch distributions once
                             # Randomly choose which distribution to start with
-                            current_distribution = np.random.choice(["high_distribution", "low_distribution"])
-                            
+                            current_distribution = np.random.choice(
+                                ["high_distribution", "low_distribution"]
+                            )
+
                             # Randomly choose the switch point (after first lab, before last lab)
                             if n_labs > 2:
                                 switch_point = np.random.randint(2, n_labs)
                             else:
-                                switch_point = n_labs  # No switch if only one lab or two labs
-                            
+                                switch_point = (
+                                    n_labs  # No switch if only one lab or two labs
+                                )
+
                             for i in range(n_labs):
                                 # Switch distribution at the switch point
                                 if i == switch_point:
-                                    current_distribution = "low_distribution" if current_distribution == "high_distribution" else "high_distribution"
-                                
-                                value = generate_lab_value(base_concept, current_distribution)
+                                    current_distribution = (
+                                        "low_distribution"
+                                        if current_distribution == "high_distribution"
+                                        else "high_distribution"
+                                    )
+
+                                value = generate_lab_value(
+                                    base_concept, current_distribution
+                                )
                                 if value is not None:
-                                    records.append({
-                                        "PID": pid, 
-                                        "CONCEPT": base_concept, 
-                                        "RESULT": value,
-                                        "LAB_INDEX": i,
-                                        "CONDITION": condition
-                                    })
+                                    records.append(
+                                        {
+                                            "PID": pid,
+                                            "CONCEPT": base_concept,
+                                            "RESULT": value,
+                                            "LAB_INDEX": i,
+                                            "CONDITION": condition,
+                                        }
+                                    )
                         else:
                             # Low-risk patients: stick to one distribution
-                            distribution = np.random.choice(["high_distribution", "low_distribution"])
-                            
+                            distribution = np.random.choice(
+                                ["high_distribution", "low_distribution"]
+                            )
+
                             for i in range(n_labs):
                                 value = generate_lab_value(base_concept, distribution)
                                 if value is not None:
-                                    records.append({
-                                        "PID": pid, 
-                                        "CONCEPT": base_concept, 
-                                        "RESULT": value,
-                                        "LAB_INDEX": i,
-                                        "CONDITION": condition
-                                    })
+                                    records.append(
+                                        {
+                                            "PID": pid,
+                                            "CONCEPT": base_concept,
+                                            "RESULT": value,
+                                            "LAB_INDEX": i,
+                                            "CONDITION": condition,
+                                        }
+                                    )
 
                 # Add related concepts based on their probabilities
                 for related_concept, related_info in info["related_concepts"].items():
@@ -215,20 +241,26 @@ def generate_multi_lab_concepts(pids_list: List[str], min_labs: int, max_labs: i
 
                     if should_generate:
                         # This is a diagnosis concept, add without value
-                        records.append({
-                            "PID": pid, 
-                            "CONCEPT": related_concept, 
-                            "RESULT": 1.0,
-                            "LAB_INDEX": -1,
-                            "CONDITION": condition
-                        })
+                        records.append(
+                            {
+                                "PID": pid,
+                                "CONCEPT": related_concept,
+                                "RESULT": 1.0,
+                                "LAB_INDEX": -1,
+                                "CONDITION": condition,
+                            }
+                        )
 
     return pd.DataFrame(records)
 
 
 def generate_timestamps(
-    pids_list: List[str], concepts: List[str], lab_indices: List[int], 
-    diag_min_days: int = DIAG_MIN_DAYS, diag_max_days: int = DIAG_MAX_DAYS, patient_df: pd.DataFrame = None
+    pids_list: List[str],
+    concepts: List[str],
+    lab_indices: List[int],
+    diag_min_days: int = DIAG_MIN_DAYS,
+    diag_max_days: int = DIAG_MAX_DAYS,
+    patient_df: pd.DataFrame = None,
 ) -> List[pd.Timestamp]:
     """
     Generate timestamps for a list of patient IDs based on time relationships.
@@ -248,11 +280,13 @@ def generate_timestamps(
     timestamps = []
     concept_timestamps = {}  # Store timestamps for each concept per patient
 
-    for i, (pid, concept, lab_index) in enumerate(zip(pids_list, concepts, lab_indices)):
+    for i, (pid, concept, lab_index) in enumerate(
+        zip(pids_list, concepts, lab_indices)
+    ):
         # Initialize patient's concept timestamps if not exists
         if pid not in concept_timestamps:
             concept_timestamps[pid] = {}
-            
+
             # Get patient birth and death dates from patient_df
             if patient_df is not None:
                 # Check if patient exists in patient_df
@@ -260,20 +294,22 @@ def generate_timestamps(
                 if len(patient_matches) > 0:
                     patient_info = patient_matches.iloc[0]
                     birthdate = pd.to_datetime(patient_info["birthdate"])
-                    
+
                     # Handle deathdate - if NaT, use a default future date
                     deathdate = pd.to_datetime(patient_info["deathdate"])
                     if pd.isna(deathdate):
                         deathdate = pd.Timestamp(year=2025, month=1, day=1)
-                        
+
                     # Ensure deathdate is after birthdate
                     if deathdate <= birthdate:
                         deathdate = birthdate + pd.Timedelta(days=1)
-                        
+
                     # Generate a random start time for this patient between birth and death
                     time_diff = (deathdate - birthdate).total_seconds()
                     random_seconds = np.random.randint(0, int(time_diff))
-                    concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["start_time"] = birthdate + pd.Timedelta(
+                        seconds=random_seconds
+                    )
                     concept_timestamps[pid]["birthdate"] = birthdate
                     concept_timestamps[pid]["deathdate"] = deathdate
                 else:
@@ -282,7 +318,9 @@ def generate_timestamps(
                     end_time = pd.Timestamp(year=2025, month=1, day=1)
                     time_diff = (end_time - start_time).total_seconds()
                     random_seconds = np.random.randint(0, int(time_diff))
-                    concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                    concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(
+                        seconds=random_seconds
+                    )
                     concept_timestamps[pid]["birthdate"] = start_time
                     concept_timestamps[pid]["deathdate"] = end_time
             else:
@@ -291,7 +329,9 @@ def generate_timestamps(
                 end_time = pd.Timestamp(year=2025, month=1, day=1)
                 time_diff = (end_time - start_time).total_seconds()
                 random_seconds = np.random.randint(0, int(time_diff))
-                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(seconds=random_seconds)
+                concept_timestamps[pid]["start_time"] = start_time + pd.Timedelta(
+                    seconds=random_seconds
+                )
                 concept_timestamps[pid]["birthdate"] = start_time
                 concept_timestamps[pid]["deathdate"] = end_time
 
@@ -299,14 +339,17 @@ def generate_timestamps(
         if concept in ["S/DIAG_POSITIVE", "S/DIAG_NEGATIVE"]:
             # Diagnosis concepts come after the last lab (configurable days after last lab)
             # Find the latest lab timestamp for this patient
-            lab_timestamps = [ts for lab_concept, ts in concept_timestamps[pid].items() 
-                            if lab_concept.startswith("S/LAB") and lab_concept != "start_time"]
+            lab_timestamps = [
+                ts
+                for lab_concept, ts in concept_timestamps[pid].items()
+                if lab_concept.startswith("S/LAB") and lab_concept != "start_time"
+            ]
             if lab_timestamps:
                 # Use the latest lab timestamp as base
                 base_timestamp = max(lab_timestamps)
                 days_after = np.random.randint(diag_min_days, diag_max_days + 1)
                 timestamp = base_timestamp + pd.Timedelta(days=days_after)
-                
+
                 # Ensure timestamp is not after death date
                 if patient_df is not None:
                     patient_matches = patient_df[patient_df["subject_id"] == pid]
@@ -330,7 +373,7 @@ def generate_timestamps(
                 # Each subsequent lab is 1-30 days after the previous
                 days_offset = sum(np.random.randint(1, 31) for _ in range(lab_index))
                 timestamp = start_time + pd.Timedelta(days=days_offset)
-                
+
                 # Ensure timestamp is not after death date
                 if patient_df is not None:
                     patient_matches = patient_df[patient_df["subject_id"] == pid]
@@ -354,53 +397,63 @@ def generate_synthetic_data(
     min_labs_per_patient: int,
     max_labs_per_patient: int,
     switching_probability: float = 1.0,
-    patient_df: pd.DataFrame = None
+    patient_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """
     Generate synthetic data with multiple lab values per patient.
     Preserves existing positive/negative patient assignments from input data.
-    
+
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
         min_labs_per_patient: Minimum number of lab values per patient
         max_labs_per_patient: Maximum number of lab values per patient
         switching_probability: Probability of switching distributions for high-risk patients
         patient_df: DataFrame containing patient information with birthdate and deathdate columns
-        
+
     Returns:
         pd.DataFrame: Generated synthetic data
     """
     # Get positive patients from input data
     input_data_with_risk = get_positive_patients(input_data, POSITIVE_DIAGS)
-    
+
     # Create patient risk mapping
     patient_risk_map = {}
     for patient_id in input_data_with_risk["subject_id"].unique():
-        patient_data = input_data_with_risk[input_data_with_risk["subject_id"] == patient_id]
+        patient_data = input_data_with_risk[
+            input_data_with_risk["subject_id"] == patient_id
+        ]
         is_positive = patient_data["is_positive"].iloc[0]
         patient_risk_map[patient_id] = is_positive
-    
+
     # Get patient IDs
     pids_list = list(patient_risk_map.keys())
-    
+
     # Generate concepts and lab values
-    concepts_data = generate_multi_lab_concepts(pids_list, min_labs_per_patient, max_labs_per_patient, switching_probability, patient_risk_map)
+    concepts_data = generate_multi_lab_concepts(
+        pids_list,
+        min_labs_per_patient,
+        max_labs_per_patient,
+        switching_probability,
+        patient_risk_map,
+    )
 
     # Create final DataFrame - match simulate_synthetic_labs.py structure exactly
-    data = pd.DataFrame({
-        "subject_id": concepts_data["PID"],
-        "code": concepts_data["CONCEPT"],
-        "numeric_value": concepts_data["RESULT"].astype(float),
-    })
+    data = pd.DataFrame(
+        {
+            "subject_id": concepts_data["PID"],
+            "code": concepts_data["CONCEPT"],
+            "numeric_value": concepts_data["RESULT"].astype(float),
+        }
+    )
 
     # Generate timestamps for each record
     data["time"] = generate_timestamps(
-        data["subject_id"].tolist(), 
+        data["subject_id"].tolist(),
         data["code"].tolist(),
         concepts_data["LAB_INDEX"].tolist(),
         DIAG_MIN_DAYS,
         DIAG_MAX_DAYS,
-        patient_df
+        patient_df,
     )
 
     return data
@@ -410,7 +463,7 @@ def validate_timestamps(data: pd.DataFrame, patient_df: pd.DataFrame = None) -> 
     """
     Validate that all timestamps fall between birth and death dates.
     Optimized version using vectorized operations.
-    
+
     Args:
         data: DataFrame containing the synthetic data with timestamps
         patient_df: DataFrame containing patient information with birthdate and deathdate columns
@@ -418,36 +471,46 @@ def validate_timestamps(data: pd.DataFrame, patient_df: pd.DataFrame = None) -> 
     if patient_df is None:
         print("No patient data provided - skipping timestamp validation")
         return
-        
+
     print("\nValidating timestamps against birth/death dates...")
-    
+
     # Merge data with patient info for vectorized validation
-    merged_data = data.merge(patient_df[["subject_id", "birthdate", "deathdate"]], on="subject_id", how="left")
-    
+    merged_data = data.merge(
+        patient_df[["subject_id", "birthdate", "deathdate"]],
+        on="subject_id",
+        how="left",
+    )
+
     # Handle missing death dates
     merged_data["deathdate"] = pd.to_datetime(merged_data["deathdate"])
-    merged_data.loc[merged_data["deathdate"].isna(), "deathdate"] = pd.Timestamp(year=2025, month=1, day=1)
-    
+    merged_data.loc[merged_data["deathdate"].isna(), "deathdate"] = pd.Timestamp(
+        year=2025, month=1, day=1
+    )
+
     # Convert birthdate to datetime
     merged_data["birthdate"] = pd.to_datetime(merged_data["birthdate"])
-    
+
     # Vectorized validation
     before_birth = merged_data["time"] < merged_data["birthdate"]
     after_death = merged_data["time"] > merged_data["deathdate"]
     violations = before_birth | after_death
-    
+
     total_checks = len(merged_data)
     violation_count = violations.sum()
-    
+
     if violation_count > 0:
         # Show first few violations for debugging
-        violation_data = merged_data[violations][["subject_id", "time", "birthdate", "deathdate"]].head(5)
+        violation_data = merged_data[violations][
+            ["subject_id", "time", "birthdate", "deathdate"]
+        ].head(5)
         print(f"First few violations:")
         for _, row in violation_data.iterrows():
-            print(f"  Patient {row['subject_id']}: timestamp {row['time']} outside birth ({row['birthdate']}) - death ({row['deathdate']}) range")
+            print(
+                f"  Patient {row['subject_id']}: timestamp {row['time']} outside birth ({row['birthdate']}) - death ({row['deathdate']}) range"
+            )
         if violation_count > 5:
             print(f"  ... and {violation_count - 5} more violations")
-    
+
     print(f"Timestamp validation complete:")
     print(f"  Total timestamp checks: {total_checks}")
     print(f"  Violations found: {violation_count}")
@@ -466,9 +529,11 @@ def print_statistics(data: pd.DataFrame) -> None:
     """
     # Get lab values for positive and negative patients
     lab_mask = data["code"] == "S/LAB1"
-    
+
     # Recreate is_positive column for analysis
-    positive_patients = set(data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique())
+    positive_patients = set(
+        data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique()
+    )
     data["is_positive"] = data["subject_id"].isin(positive_patients)
     positive_mask = data["is_positive"]
 
@@ -497,8 +562,8 @@ def calculate_theoretical_switch_auc(
     subject_col="subject_id",
     value_col="numeric_value",
     positive_diag_code="S/DIAG_POSITIVE",
-    target_col=None,             # if None, derive from diag code
-    use_distance=True
+    target_col=None,  # if None, derive from diag code
+    use_distance=True,
 ):
     # 1) Work only on the lab rows
     labs = df[df["code"] == lab_code].copy()
@@ -529,6 +594,7 @@ def calculate_theoretical_switch_auc(
     y = labs.groupby(subject_col)[target_col].first().reindex(score.index)
     auc = roc_auc_score(y.values, score.values)
     return auc
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -614,10 +680,14 @@ def main():
 
     print(f"\nGenerating synthetic data with:")
     print(f"  - {input_data['subject_id'].nunique()} patients")
-    print(f"  - {args.min_labs_per_patient}-{args.max_labs_per_patient} lab values per patient")
+    print(
+        f"  - {args.min_labs_per_patient}-{args.max_labs_per_patient} lab values per patient"
+    )
     print(f"  - {positive_patients} high-risk patients (switching distributions)")
     print(f"  - {negative_patients} low-risk patients (consistent distribution)")
-    print(f"  - {args.switching_probability*100:.1f}% switching probability for high-risk patients")
+    print(
+        f"  - {args.switching_probability * 100:.1f}% switching probability for high-risk patients"
+    )
 
     # Generate synthetic data
     data = generate_synthetic_data(
@@ -625,7 +695,7 @@ def main():
         args.min_labs_per_patient,
         args.max_labs_per_patient,
         args.switching_probability,
-        patient_df
+        patient_df,
     )
 
     print("\nGenerated data:")
@@ -633,12 +703,12 @@ def main():
 
     # Print statistics
     print_statistics(data)
-    
+
     # Validate timestamps against birth/death dates
     validate_timestamps(data, patient_df)
 
     # Generate save name dynamically
-    save_name = f"multi_lab_switching_risk_labs{args.min_labs_per_patient}_{args.max_labs_per_patient}_switch{int(args.switching_probability*100)}_n{N}_mean{int(LOW_MEAN*100)}_{int(HIGH_MEAN*100)}_std{int(STD*100)}"
+    save_name = f"multi_lab_switching_risk_labs{args.min_labs_per_patient}_{args.max_labs_per_patient}_switch{int(args.switching_probability * 100)}_n{N}_mean{int(LOW_MEAN * 100)}_{int(HIGH_MEAN * 100)}_std{int(STD * 100)}"
 
     # Write to CSV
     write_dir = Path(args.write_dir)
@@ -658,7 +728,7 @@ def main():
             ) / (max_val - min_val)
         else:
             normalized_data.loc[lab_mask, "numeric_value"] = 0.0
-    
+
     normalized_filename = write_dir / f"{save_name}_minmaxnorm.csv"
     normalized_data.to_csv(normalized_filename, index=False)
 
@@ -666,6 +736,7 @@ def main():
     midpoint = (HIGH_MEAN + LOW_MEAN) / 2
     theoretical_auc = calculate_theoretical_switch_auc(normalized_data, midpoint)
     print(f"Theoretical AUC: {theoretical_auc}")
+
 
 if __name__ == "__main__":
     main()

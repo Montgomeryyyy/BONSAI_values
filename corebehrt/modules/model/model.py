@@ -28,7 +28,7 @@ from corebehrt.constants.data import (
     VALUE_FEAT,
     TARGET_VALUE,
     VAL_TOKEN,
-    VALUE_MASK_TOKEN
+    VALUE_MASK_TOKEN,
 )
 from corebehrt.constants.model import (
     TIME2VEC_ABSPOS_SCALE,
@@ -66,7 +66,7 @@ class CorebehrtEncoder(ModernBertModel):
             age_shift=getattr(config, "age_shift", TIME2VEC_AGE_SHIFT),
             abspos_scale=getattr(config, "abspos_scale", TIME2VEC_ABSPOS_SCALE),
             abspos_shift=getattr(config, "abspos_shift", TIME2VEC_ABSPOS_SHIFT),
-            value_embedding_mode=getattr(config, "value_embedding_mode", None)
+            value_embedding_mode=getattr(config, "value_embedding_mode", None),
         )
         self.is_causal = getattr(config, "is_causal", False)
         self.val_token_id = DEFAULT_VOCABULARY[VAL_TOKEN]
@@ -199,7 +199,9 @@ class CorebehrtForPretraining(CorebehrtEncoder):
         # === Value Prediction ===
         # Predict values for all masked positions (similar to concept prediction)
         if value_labels is not None:
-            predicted_values_all = self.val_head(last_hidden_state).squeeze(-1)  # (N_masked,)
+            predicted_values_all = self.val_head(last_hidden_state).squeeze(
+                -1
+            )  # (N_masked,)
             outputs.predicted_values = predicted_values_all
         else:
             predicted_values_all = None
@@ -208,8 +210,10 @@ class CorebehrtForPretraining(CorebehrtEncoder):
 
         if value_labels is not None and values_input is not None and labels is not None:
             # Only compute value loss where: (1) value was masked, (2) we have a valid target
-            # Masked values have values_input as VALUE_MASK_TOKEN 
-            val_positions = (values_input == VALUE_MASK_TOKEN) # compatible with combined and separate
+            # Masked values have values_input as VALUE_MASK_TOKEN
+            val_positions = (
+                values_input == VALUE_MASK_TOKEN
+            )  # compatible with combined and separate
 
             if val_positions.any():
                 val_targets = value_labels[val_positions]  # (N_val_masked,)

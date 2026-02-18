@@ -28,7 +28,7 @@ class ConceptMasker:
                 [
                     token
                     for token in vocabulary
-                    if token.startswith("[") and token != VAL_TOKEN #hardcoded for now
+                    if token.startswith("[") and token != VAL_TOKEN  # hardcoded for now
                 ]
             )
             if ignore_special_tokens
