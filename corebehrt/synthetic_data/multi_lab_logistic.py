@@ -853,9 +853,7 @@ def main():
     print(f"Saved min-max normalized data to {normalized_filename}")
 
     # Calculate theoretical performance
-    _ = calculate_theoretical_performance(
-        data, args.num_labs, coefficients
-    )
+    _ = calculate_theoretical_performance(data, args.num_labs, coefficients)
 
 
 if __name__ == "__main__":
