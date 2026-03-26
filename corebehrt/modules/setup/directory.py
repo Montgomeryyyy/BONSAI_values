@@ -16,6 +16,7 @@ from corebehrt.constants.paths import (
     EVALUATE_CFG,
     XGBOOST_CFG,
     EVALUATE_PRETRAIN_CFG,
+    MATCH_DATA_CFG
 )
 from corebehrt.functional.setup.checks import check_categories
 from corebehrt.modules.setup.config import Config, load_config
@@ -408,6 +409,16 @@ class DirectoryPreparer:
             # If name is given, use it as config name
             self.write_config("prepared_data", name=name)
         self.write_config("prepared_data", source="features", name=DATA_CFG)
+
+    def setup_match_data(self) -> None:
+        """
+        Validates path config and sets up directories for match data.
+        """
+        self.setup_logging("match data")
+        self.check_directory("prepared_data")
+        self.check_directory("reference_data")
+        self.create_directory("matched_data", clear=True)
+        self.write_config("matched_data", name=MATCH_DATA_CFG)
 
     def setup_finetune(self) -> None:
         """

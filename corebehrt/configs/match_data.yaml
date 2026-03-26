@@ -1,0 +1,11 @@
+logging:
+  level: INFO
+  path: ./outputs/logs
+
+paths:
+## INPUTS
+  prepared_data: ./outputs/testing/held_out/processed_data_2/ # Save model/outputs to this folder
+  reference_data: ./outputs/testing/held_out/processed_data/ # Save match data to this folder
+  #runs: ./outputs/pretraining # Use for generating a new model folder
+  
+  matched_data: ./outputs/testing/held_out/matched_data/ # Save matched data to this folder

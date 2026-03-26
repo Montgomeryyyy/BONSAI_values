@@ -149,12 +149,22 @@ class DatasetPreparer:
             if data_cfg.get("low_priority_prefixes", None) is None
             else get_non_priority_tokens(self.vocab, data_cfg.low_priority_prefixes)
         )
+        pre_truncation_lens = {p.pid: len(p.concepts) for p in data.patients}
         data.patients = data.process_in_parallel(
             truncate_patient,
             max_len=data_cfg.truncation_len,
             background_length=background_length,
             sep_token=self.vocab["[SEP]"],
             non_priority_tokens=non_priority_tokens,
+        )
+        post_truncation_lens = {p.pid: len(p.concepts) for p in data.patients}
+        truncated_patients = sum(
+            1
+            for pid, pre_len in pre_truncation_lens.items()
+            if pid in post_truncation_lens and post_truncation_lens[pid] < pre_len
+        )
+        logger.info(
+            f"Truncation: {truncated_patients}/{len(pre_truncation_lens)} patients had shorter sequences after truncation"
         )
 
         data.patients = data.process_in_parallel(normalize_segments_for_patient)
