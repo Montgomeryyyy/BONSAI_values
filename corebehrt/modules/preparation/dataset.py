@@ -342,6 +342,9 @@ class PatientDataset:
         Values and segments are ignored; matched rows keep source-side values and segments.
         """
         nonidentical_start_patients = 0
+        skipped_unalignable_patients = 0
+        skipped_source_shorter_than_reference = 0
+        unalignable_examples = []
 
         id_to_token_source = _invert_vocab(vocab_source)
         id_to_token_reference = _invert_vocab(vocab_reference)
@@ -379,6 +382,7 @@ class PatientDataset:
         skipped_source_patients = len(self.patients) - len(source_patients_with_reference)
         self.patients = source_patients_with_reference
 
+        matched_patients = []
         for source_patient in self.patients:
             reference_patient = reference_by_pid[source_patient.pid]
 
@@ -424,13 +428,23 @@ class PatientDataset:
                 if not is_identical_at_start:
                     nonidentical_start_patients += 1
 
-            matched_indices = compute_match_source_indices(
-                source_patient,
-                reference_patient,
-                vocab_source,
-                vocab_reference,
-                code_mapping,
-            )
+            if len(source_events) < len(target_events):
+                skipped_source_shorter_than_reference += 1
+                continue
+
+            try:
+                matched_indices = compute_match_source_indices(
+                    source_patient,
+                    reference_patient,
+                    vocab_source,
+                    vocab_reference,
+                    code_mapping,
+                )
+            except ValueError as exc:
+                skipped_unalignable_patients += 1
+                if len(unalignable_examples) < 5:
+                    unalignable_examples.append((source_patient.pid, str(exc)))
+                continue
             source_patient.concepts = [source_concepts[i] for i in matched_indices]
             source_patient.values = [source_values[i] for i in matched_indices]
             source_patient.abspos = [source_abspos[i] for i in matched_indices]
@@ -441,11 +455,25 @@ class PatientDataset:
                 if isinstance(source_outcome, list) and isinstance(target_outcome, list)
                 else source_outcome
             )
+            matched_patients.append(source_patient)
+        self.patients = matched_patients
         self.match_stats = {
             "nonidentical_start_patients": nonidentical_start_patients,
             "total_patients": len(self.patients),
             "skipped_source_patients_without_reference": skipped_source_patients,
+            "skipped_source_shorter_than_reference": skipped_source_shorter_than_reference,
+            "skipped_unalignable_patients": skipped_unalignable_patients,
         }
+        if skipped_source_shorter_than_reference > 0:
+            print(
+                "Warning: Skipped patients where source sequence is shorter than reference. "
+                f"Count={skipped_source_shorter_than_reference}"
+            )
+        if skipped_unalignable_patients > 0:
+            print(
+                "Warning: Skipped unalignable patients during matching. "
+                f"Count={skipped_unalignable_patients}, examples={unalignable_examples}"
+            )
         print(
             "match_datasets(): non-identical at start "
             f"{nonidentical_start_patients}/{len(self.patients)} patients"
