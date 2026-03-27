@@ -413,22 +413,28 @@ class PatientDataset:
                     source_ages,
                 )
             )
+            source_events_no_val = [
+                event for event in source_events if id_to_token_source.get(event[0]) != VAL_TOKEN
+            ]
+            target_events_no_val = [
+                event for event in target_events if id_to_token_reference.get(event[0]) != VAL_TOKEN
+            ]
 
             # Count patients whose sequences are not already identical at the start.
             # Same key as matching: concept token, abspos, age (values/segments ignored).
-            if len(source_events) != len(target_events):
+            if len(source_events_no_val) != len(target_events_no_val):
                 nonidentical_start_patients += 1
             else:
                 is_identical_at_start = all(
                     match_events_equal(
                         se, te, id_to_token_source, id_to_token_reference, code_mapping
                     )
-                    for se, te in zip(source_events, target_events)
+                    for se, te in zip(source_events_no_val, target_events_no_val)
                 )
                 if not is_identical_at_start:
                     nonidentical_start_patients += 1
 
-            if len(source_events) < len(target_events):
+            if len(source_events_no_val) < len(target_events_no_val):
                 skipped_source_shorter_than_reference += 1
                 continue
 
