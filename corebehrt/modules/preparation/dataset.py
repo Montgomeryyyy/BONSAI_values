@@ -19,6 +19,7 @@ from corebehrt.constants.data import (
     VALUE_FEAT,
     TARGET,
     TARGET_VALUE,
+    VAL_TOKEN,
     VALUE_MASK_TOKEN,
 )
 from corebehrt.modules.preparation.mask import ConceptMasker
@@ -121,7 +122,7 @@ def compute_match_source_indices(
     id_to_token_source = _invert_vocab(vocab_source)
     id_to_token_reference = _invert_vocab(vocab_reference)
 
-    source_events = list(
+    source_events_all = list(
         zip(
             source_patient.concepts,
             source_patient.values,
@@ -130,7 +131,7 @@ def compute_match_source_indices(
             source_patient.ages,
         )
     )
-    reference_events = list(
+    reference_events_all = list(
         zip(
             reference_patient.concepts,
             reference_patient.values,
@@ -139,6 +140,16 @@ def compute_match_source_indices(
             reference_patient.ages,
         )
     )
+    source_filtered = [
+        (idx, event)
+        for idx, event in enumerate(source_events_all)
+        if id_to_token_source.get(event[0]) != VAL_TOKEN
+    ]
+    reference_events = [
+        event for event in reference_events_all if id_to_token_reference.get(event[0]) != VAL_TOKEN
+    ]
+    source_events = [event for _, event in source_filtered]
+    source_original_indices = [idx for idx, _ in source_filtered]
     pid = source_patient.pid
     if len(source_events) < len(reference_events):
         raise ValueError(
@@ -199,7 +210,7 @@ def compute_match_source_indices(
                 f"Source tail ({source_window_start}:{len(source_events)})={source_tail}. "
                 f"Source candidates with same concept token={same_concept_candidates}.{extra}"
             )
-        matched_indices.append(source_idx)
+        matched_indices.append(source_original_indices[source_idx])
         source_idx += 1
     return matched_indices
 

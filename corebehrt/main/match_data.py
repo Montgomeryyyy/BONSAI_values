@@ -103,8 +103,8 @@ def _print_match_alignment_debug(
         f"matched_pairs={len(matched)}, skipped_source_rows={len(skipped_src)}"
     )
     print(
-        "  Columns: ref# | token(ref id) | translated | val | seg | abspos | age "
-        "|| src# | token(src id) | translated | val | seg | abspos | age || keys_match"
+        "  Columns: ref# | concept(ref id) | value_ref | abspos_ref | age_ref "
+        "|| src# | concept(src id) | value_src | abspos_src | age_src || keys_match"
     )
     show = min(max_rows, len(matched))
     for k in range(show):
@@ -135,12 +135,10 @@ def _print_match_alignment_debug(
             src_event, ref_event, id_src, id_ref, code_mapping
         )
         rv = reference_patient.values[k]
-        rs = reference_patient.segments[k]
         sv = source_patient_original.values[j]
-        ss = source_patient_original.segments[j]
         print(
-            f"  {k:3d} | {tok_r} ({rc}) | {tr_r} | {_fmt_value(rv)} | {rs} | {ra:.6g} | {reference_patient.ages[k]:.6g} "
-            f"|| {j:3d} | {tok_s} ({sc}) | {tr_s} | {_fmt_value(sv)} | {ss} | {sa:.6g} | {source_patient_original.ages[j]:.6g} "
+            f"  {k:3d} | {tr_r} ({rc}) | {_fmt_value(rv)} | {ra:.6g} | {reference_patient.ages[k]:.6g} "
+            f"|| {j:3d} | {tr_s} ({sc}) | {_fmt_value(sv)} | {sa:.6g} | {source_patient_original.ages[j]:.6g} "
             f"|| {keys_ok}"
         )
     if len(matched) > show:
