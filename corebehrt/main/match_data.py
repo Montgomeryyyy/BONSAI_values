@@ -51,26 +51,55 @@ def _fmt_value(v) -> str:
     return f"{v:.6g}" if isinstance(v, float) else str(v)
 
 
-def _patient_summary(label: str, patient, idx: int) -> None:
+def _patient_summary(
+    label: str,
+    patient,
+    idx: int,
+    vocab: dict,
+    code_mapping: Optional[Dict[str, str]],
+) -> None:
     """Print one-line stats for a PatientData sample (debugging)."""
     n = len(patient.concepts)
     head = patient.concepts[: min(5, n)]
+    n_no_val = _count_non_val(patient, vocab, code_mapping)
     print(
         f"  [{label}] index={idx} pid={patient.pid} "
         f"seq_len={n} outcome={patient.outcome} "
+        f"seq_len_no_val={n_no_val} "
         f"concept_ids[:5]={head}"
     )
 
 
-def _non_val_rows(patient, vocab: dict, code_mapping: Optional[Dict[str, str]], max_rows: int):
+def _non_val_rows(
+    patient,
+    vocab: dict,
+    code_mapping: Optional[Dict[str, str]],
+    max_rows: int,
+):
+    """
+    Return non-VAL rows with an explicit matching key.
+    Key must match what matcher uses: (translated_concept, abspos, age).
+    """
     id_to_token = _invert_vocab(vocab)
     rows = []
-    for c, v, a, g in zip(patient.concepts, patient.values, patient.abspos, patient.ages):
+    for idx, (c, v, a, g) in enumerate(
+        zip(patient.concepts, patient.values, patient.abspos, patient.ages)
+    ):
         token = id_to_token.get(c, f"<?:{c}>")
         translated = translate_concept_token(token, code_mapping)
         if token == VAL_TOKEN or translated == VAL_TOKEN:
             continue
-        rows.append((translated, _fmt_value(v), a, g))
+        key = (translated, a, g)
+        rows.append(
+            {
+                "src_idx": idx,
+                "concept": translated,
+                "value": v,
+                "abspos": a,
+                "age": g,
+                "key": key,
+            }
+        )
         if len(rows) >= max_rows:
             break
     return rows
@@ -105,15 +134,54 @@ def _print_patient_side_by_side(
         f"  PID={pid}: source_non_val {before_n} -> {after_n}; reference_non_val={ref_n}"
     )
     print(
-        "    Columns: idx | reference(concept, value, abspos, age) "
-        "|| matched_source(concept, value, abspos, age)"
+        "    Columns: ref_row# | reference(concept, value, abspos, age) "
+        "|| matched_source(concept, value, abspos, age) | key_match"
     )
-    ref_rows = _non_val_rows(reference_patient, vocab_reference, code_mapping, max_rows)
-    src_rows = _non_val_rows(source_after, vocab_source, code_mapping, max_rows)
-    for i in range(max(len(ref_rows), len(src_rows))):
-        left = ref_rows[i] if i < len(ref_rows) else ("-", "-", "-", "-")
-        right = src_rows[i] if i < len(src_rows) else ("-", "-", "-", "-")
-        print(f"    {i:2d} | {left} || {right}")
+
+    ref_rows = _non_val_rows(
+        reference_patient, vocab_reference, code_mapping, max_rows=max_rows
+    )
+    src_rows_all = _non_val_rows(
+        source_after, vocab_source, code_mapping, max_rows=10_000_000
+    )
+    # Multimap: key -> list of available source rows to consume.
+    available = {}
+    for r in src_rows_all:
+        available.setdefault(r["key"], []).append(r)
+
+    used_keys = 0
+    for i, ref_r in enumerate(ref_rows):
+        key = ref_r["key"]
+        if key in available and available[key]:
+            src_r = available[key].pop(0)
+            used_keys += 1
+            key_match = True
+            left = (
+                ref_r["concept"],
+                _fmt_value(ref_r["value"]),
+                ref_r["abspos"],
+                ref_r["age"],
+            )
+            right = (
+                src_r["concept"],
+                _fmt_value(src_r["value"]),
+                src_r["abspos"],
+                src_r["age"],
+            )
+        else:
+            key_match = False
+            left = (
+                ref_r["concept"],
+                _fmt_value(ref_r["value"]),
+                ref_r["abspos"],
+                ref_r["age"],
+            )
+            right = ("MISSING", "MISSING", "MISSING", "MISSING")
+
+        print(f"    {i:2d} | {left} || {right} | {key_match}")
+
+    if used_keys == 0:
+        print("    Note: no reference keys found in matched source for these rows.")
 
 
 def main_match_data(config_path):
@@ -158,8 +226,20 @@ def main_match_data(config_path):
         f"| path={cfg.paths.reference_data}"
     )
     print(f"Sample patient before match (PatientDataset[{sample_idx}]):")
-    _patient_summary("prepared (source)", prepared_data[sample_idx], sample_idx)
-    _patient_summary("reference", reference_data[sample_idx], sample_idx)
+    _patient_summary(
+        "prepared (source)",
+        prepared_data[sample_idx],
+        sample_idx,
+        vocab_source,
+        code_mapping,
+    )
+    _patient_summary(
+        "reference",
+        reference_data[sample_idx],
+        sample_idx,
+        vocab_reference,
+        code_mapping,
+    )
 
     matched_data = prepared_data.match_datasets(
         reference_data, vocab_source, vocab_reference, code_mapping
@@ -179,7 +259,13 @@ def main_match_data(config_path):
             f"skipped_without_reference={stats.get('skipped_source_patients_without_reference', 0)}"
         )
     print(f"Sample patient after match (PatientDataset[{sample_idx}]):")
-    _patient_summary("matched (source aligned to reference)", matched_data[sample_idx], sample_idx)
+    _patient_summary(
+        "matched (source aligned to reference)",
+        matched_data[sample_idx],
+        sample_idx,
+        vocab_source,
+        code_mapping,
+    )
 
     reference_by_pid = {p.pid: p for p in reference_data.patients}
     changed_pids = []
