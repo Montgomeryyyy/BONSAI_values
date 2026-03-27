@@ -48,6 +48,7 @@ def add_parser(subparsers) -> None:
             "xgboost_cv",
             "evaluate_xgboost",
             "evaluate_pretrain",
+            "match_data",
         },
         help="Job to run.",
     )

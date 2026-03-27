@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from os.path import join
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -33,6 +33,110 @@ class PatientData:
     ages: List[float]  # e.g. age at each concept
     values: List[float]
     outcome: int = None
+
+
+def _invert_vocab(vocab: Dict) -> Dict:
+    return {v: k for k, v in vocab.items()}
+
+
+def _match_values_equal(left, right) -> bool:
+    if pd.isna(left) and pd.isna(right):
+        return True
+    if (
+        isinstance(left, (float, int, np.floating, np.integer))
+        and isinstance(right, (float, int, np.floating, np.integer))
+    ):
+        return bool(np.isclose(left, right, rtol=1e-7, atol=1e-7))
+    return left == right
+
+
+def match_events_equal(
+    left_event: tuple,
+    right_event: tuple,
+    id_to_token_source: Dict,
+    id_to_token_reference: Dict,
+) -> bool:
+    left_concept_id, _lv, left_abspos, _ls, left_age = left_event
+    right_concept_id, _rv, right_abspos, _rs, right_age = right_event
+    if left_concept_id not in id_to_token_source or right_concept_id not in id_to_token_reference:
+        return False
+    left_token = id_to_token_source[left_concept_id]
+    right_token = id_to_token_reference[right_concept_id]
+    return (
+        left_token == right_token
+        and _match_values_equal(left_abspos, right_abspos)
+        and _match_values_equal(left_age, right_age)
+    )
+
+
+def compute_match_source_indices(
+    source_patient: PatientData,
+    reference_patient: PatientData,
+    vocab_source: Dict,
+    vocab_reference: Dict,
+) -> List[int]:
+    """
+    For each reference event in order, find the matching index in the source sequence
+    (subsequence alignment). Match key: shared concept token, abspos, age (cross-vocabulary).
+    """
+    id_to_token_source = _invert_vocab(vocab_source)
+    id_to_token_reference = _invert_vocab(vocab_reference)
+
+    source_events = list(
+        zip(
+            source_patient.concepts,
+            source_patient.values,
+            source_patient.abspos,
+            source_patient.segments,
+            source_patient.ages,
+        )
+    )
+    reference_events = list(
+        zip(
+            reference_patient.concepts,
+            reference_patient.values,
+            reference_patient.abspos,
+            reference_patient.segments,
+            reference_patient.ages,
+        )
+    )
+    pid = source_patient.pid
+    matched_indices: List[int] = []
+    source_idx = 0
+    for ref_idx, ref_event in enumerate(reference_events):
+        while source_idx < len(source_events) and not match_events_equal(
+            source_events[source_idx],
+            ref_event,
+            id_to_token_source,
+            id_to_token_reference,
+        ):
+            source_idx += 1
+        if source_idx == len(source_events):
+            source_window_start = max(0, len(source_events) - 5)
+            source_tail = source_events[source_window_start:]
+            reference_window_start = max(0, ref_idx - 2)
+            reference_window_end = min(len(reference_events), ref_idx + 3)
+            reference_window = reference_events[
+                reference_window_start:reference_window_end
+            ]
+            ref_concept_token = id_to_token_reference[ref_event[0]]
+            same_concept_candidates = [
+                (idx, event)
+                for idx, event in enumerate(source_events)
+                if event[0] in id_to_token_source
+                and id_to_token_source[event[0]] == ref_concept_token
+            ][:10]
+            raise ValueError(
+                "Could not align source to reference. "
+                f"PID={pid}, missing reference event at index {ref_idx}: {ref_event}. "
+                f"Source events={len(source_events)}, reference events={len(reference_events)}. "
+                f"Reference window ({reference_window_start}:{reference_window_end})={reference_window}. "
+                f"Source tail ({source_window_start}:{len(source_events)})={source_tail}. "
+                f"Source candidates with same concept={same_concept_candidates}"
+            )
+        matched_indices.append(source_idx)
+        source_idx += 1
+    return matched_indices
 
 
 class PatientDataset:
@@ -148,74 +252,22 @@ class PatientDataset:
             combined_patients.extend(dataset.patients)
         return PatientDataset(combined_patients)
 
-    def match_datasets(self, reference_dataset: "PatientDataset") -> "PatientDataset":
-        """Match current dataset to reference dataset by id and full event tuples."""
+    def match_datasets(
+        self,
+        reference_dataset: "PatientDataset",
+        vocab_source: Dict,
+        vocab_reference: Dict,
+    ) -> "PatientDataset":
+        """Align source patients to reference by PID using cross-vocabulary concept tokens.
+
+        For each event, match on (concept token, abspos, age). Concept IDs are compared
+        via their string tokens in each vocabulary. Values and segments are ignored for
+        matching; matched rows keep source-side values and segments.
+        """
         nonidentical_start_patients = 0
 
-        def _values_equal(left, right):
-            # Treat missing values as equal so NaN fields can be matched.
-            if pd.isna(left) and pd.isna(right):
-                return True
-            if (
-                isinstance(left, (float, int, np.floating, np.integer))
-                and isinstance(right, (float, int, np.floating, np.integer))
-            ):
-                return bool(np.isclose(left, right, rtol=1e-7, atol=1e-7))
-            return left == right
-
-        def _events_equal(left_event, right_event):
-            # Segment index is sequence-position dependent and can differ after filtering.
-            # Match on concept, value, abspos, age only.
-            left_concept, left_value, left_abspos, _left_segment, left_age = left_event
-            right_concept, right_value, right_abspos, _right_segment, right_age = (
-                right_event
-            )
-            return (
-                _values_equal(left_concept, right_concept)
-                and _values_equal(left_value, right_value)
-                and _values_equal(left_abspos, right_abspos)
-                and _values_equal(left_age, right_age)
-            )
-
-        def _find_reference_in_source_indices(source_events, reference_events, pid):
-            """
-            Find indices in source_events that match reference_events in order.
-            Events are matched in-order by:
-            (concept, value, abspos, age)
-            Segment is intentionally ignored.
-            """
-            matched_indices = []
-            source_idx = 0
-            for ref_idx, ref_event in enumerate(reference_events):
-                while (
-                    source_idx < len(source_events)
-                    and not _events_equal(source_events[source_idx], ref_event)
-                ):
-                    source_idx += 1
-                if source_idx == len(source_events):
-                    source_window_start = max(0, len(source_events) - 5)
-                    source_tail = source_events[source_window_start:]
-                    reference_window_start = max(0, ref_idx - 2)
-                    reference_window_end = min(len(reference_events), ref_idx + 3)
-                    reference_window = reference_events[
-                        reference_window_start:reference_window_end
-                    ]
-                    same_concept_candidates = [
-                        (idx, event)
-                        for idx, event in enumerate(source_events)
-                        if event[0] == ref_event[0]
-                    ][:10]
-                    raise ValueError(
-                        "Could not align source to reference. "
-                        f"PID={pid}, missing reference event at index {ref_idx}: {ref_event}. "
-                        f"Source events={len(source_events)}, reference events={len(reference_events)}. "
-                        f"Reference window ({reference_window_start}:{reference_window_end})={reference_window}. "
-                        f"Source tail ({source_window_start}:{len(source_events)})={source_tail}. "
-                        f"Source candidates with same concept={same_concept_candidates}"
-                    )
-                matched_indices.append(source_idx)
-                source_idx += 1
-            return matched_indices
+        id_to_token_source = _invert_vocab(vocab_source)
+        id_to_token_reference = _invert_vocab(vocab_reference)
 
         source_pids = [patient.pid for patient in self.patients]
         reference_pids = [patient.pid for patient in reference_dataset.patients]
@@ -271,19 +323,22 @@ class PatientDataset:
             )
 
             # Count patients whose sequences are not already identical at the start.
-            # "Identical" uses the same matching key (concept, value, abspos, age),
-            # with segment ignored.
+            # Same key as matching: concept token, abspos, age (values/segments ignored).
             if len(source_events) != len(target_events):
                 nonidentical_start_patients += 1
             else:
                 is_identical_at_start = all(
-                    _events_equal(se, te) for se, te in zip(source_events, target_events)
+                    match_events_equal(se, te, id_to_token_source, id_to_token_reference)
+                    for se, te in zip(source_events, target_events)
                 )
                 if not is_identical_at_start:
                     nonidentical_start_patients += 1
 
-            matched_indices = _find_reference_in_source_indices(
-                source_events, target_events, source_patient.pid
+            matched_indices = compute_match_source_indices(
+                source_patient,
+                reference_patient,
+                vocab_source,
+                vocab_reference,
             )
             source_patient.concepts = [source_concepts[i] for i in matched_indices]
             source_patient.values = [source_values[i] for i in matched_indices]
