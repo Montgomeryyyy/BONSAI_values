@@ -337,25 +337,36 @@ class PatientDataset:
 
         source_pids = [patient.pid for patient in self.patients]
         reference_pids = [patient.pid for patient in reference_dataset.patients]
-        if len(source_pids) != len(reference_pids):
-            raise ValueError(
-                "Source and reference have different patient counts: "
-                f"{len(source_pids)} != {len(reference_pids)}"
-            )
         if len(set(source_pids)) != len(source_pids):
             raise ValueError("Source dataset contains duplicate patient IDs")
         if len(set(reference_pids)) != len(reference_pids):
             raise ValueError("Reference dataset contains duplicate patient IDs")
-        if set(source_pids) != set(reference_pids):
-            missing_in_source = set(reference_pids) - set(source_pids)
-            missing_in_reference = set(source_pids) - set(reference_pids)
-            raise ValueError(
-                "Source and reference patient ID sets differ. "
-                f"Missing in source: {sorted(missing_in_source)[:5]}, "
-                f"missing in reference: {sorted(missing_in_reference)[:5]}"
+        if len(source_pids) != len(reference_pids):
+            print(
+                "Warning: Source and reference have different patient counts. "
+                f"Proceeding with source-driven matching: {len(source_pids)} vs {len(reference_pids)}"
+            )
+        source_pid_set = set(source_pids)
+        reference_pid_set = set(reference_pids)
+        missing_in_source = reference_pid_set - source_pid_set
+        missing_in_reference = source_pid_set - reference_pid_set
+        if missing_in_source:
+            print(
+                "Warning: Reference contains patients not present in source; these will be ignored. "
+                f"Count={len(missing_in_source)}, examples={sorted(missing_in_source)[:5]}"
+            )
+        if missing_in_reference:
+            print(
+                "Warning: Source contains patients not present in reference; these will be skipped. "
+                f"Count={len(missing_in_reference)}, examples={sorted(missing_in_reference)[:5]}"
             )
 
         reference_by_pid = {patient.pid: patient for patient in reference_dataset.patients}
+        source_patients_with_reference = [
+            patient for patient in self.patients if patient.pid in reference_by_pid
+        ]
+        skipped_source_patients = len(self.patients) - len(source_patients_with_reference)
+        self.patients = source_patients_with_reference
 
         for source_patient in self.patients:
             reference_patient = reference_by_pid[source_patient.pid]
@@ -422,6 +433,7 @@ class PatientDataset:
         self.match_stats = {
             "nonidentical_start_patients": nonidentical_start_patients,
             "total_patients": len(self.patients),
+            "skipped_source_patients_without_reference": skipped_source_patients,
         }
         print(
             "match_datasets(): non-identical at start "

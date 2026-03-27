@@ -238,6 +238,8 @@ def main_match_data(config_path):
     print(f"Sample patient after match (PatientDataset[{sample_idx}]):")
     _patient_summary("matched (source aligned to reference)", matched_data[sample_idx], sample_idx)
 
+    matched_data.save(cfg.paths.matched_data)
+
 if __name__ == "__main__":
     args = get_args(CONFIG_PATH)
     config_path = args.config_path
