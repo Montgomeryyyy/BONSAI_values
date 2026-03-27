@@ -3,6 +3,7 @@
 import copy
 import logging
 import os
+import shutil
 from os.path import join
 from typing import Dict, Optional
 
@@ -295,6 +296,18 @@ def main_match_data(config_path):
             )
 
     matched_data.save(cfg.paths.matched_data)
+
+    # Copy over all non-patient artifacts from prepared_data → matched_data
+    # so matched_data contains the same aux files (vocab, csvs, configs, etc.).
+    for name in os.listdir(cfg.paths.prepared_data):
+        if name == PREPARED_ALL_PATIENTS:
+            continue
+        src = join(cfg.paths.prepared_data, name)
+        dst = join(cfg.paths.matched_data, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
 
 if __name__ == "__main__":
     args = get_args(CONFIG_PATH)
