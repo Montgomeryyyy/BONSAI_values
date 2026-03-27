@@ -1,5 +1,4 @@
 import os
-from collections import Counter
 from dataclasses import dataclass
 from os.path import join
 from typing import Dict, List, Optional
@@ -343,64 +342,9 @@ class PatientDataset:
         Values and segments are ignored; matched rows keep source-side values and segments.
         """
         nonidentical_start_patients = 0
-        skipped_unalignable_patients = 0
-        skipped_source_shorter_than_reference = 0
-        fallback_non_order_patients = 0
-        unalignable_examples = []
 
         id_to_token_source = _invert_vocab(vocab_source)
         id_to_token_reference = _invert_vocab(vocab_reference)
-
-        def _fallback_match_indices_ignore_within_time_order(
-            source_patient: PatientData, reference_patient: PatientData
-        ) -> List[int]:
-            """
-            Fallback matcher using multiset counts of (concept_key, abspos, age), ignoring
-            sequence order. Keeps selected rows in original source order.
-            """
-            source_events = list(
-                zip(
-                    source_patient.concepts,
-                    source_patient.values,
-                    source_patient.abspos,
-                    source_patient.segments,
-                    source_patient.ages,
-                )
-            )
-            reference_events = list(
-                zip(
-                    reference_patient.concepts,
-                    reference_patient.values,
-                    reference_patient.abspos,
-                    reference_patient.segments,
-                    reference_patient.ages,
-                )
-            )
-
-            ref_counter = Counter()
-            for concept_id, _val, abspos, _seg, age in reference_events:
-                if id_to_token_reference.get(concept_id) == VAL_TOKEN:
-                    continue
-                key = (
-                    concept_match_key(concept_id, id_to_token_reference, code_mapping),
-                    abspos,
-                    age,
-                )
-                ref_counter[key] += 1
-
-            matched = []
-            for idx, (concept_id, _val, abspos, _seg, age) in enumerate(source_events):
-                if id_to_token_source.get(concept_id) == VAL_TOKEN:
-                    continue
-                key = (
-                    concept_match_key(concept_id, id_to_token_source, code_mapping),
-                    abspos,
-                    age,
-                )
-                if ref_counter[key] > 0:
-                    ref_counter[key] -= 1
-                    matched.append(idx)
-            return matched
 
         source_pids = [patient.pid for patient in self.patients]
         reference_pids = [patient.pid for patient in reference_dataset.patients]
@@ -491,29 +435,29 @@ class PatientDataset:
                 if not is_identical_at_start:
                     nonidentical_start_patients += 1
 
-            if len(source_events) < len(target_events):
-                skipped_source_shorter_than_reference += 1
-                continue
-
-            try:
-                matched_indices = compute_match_source_indices(
-                    source_patient,
-                    reference_patient,
-                    vocab_source,
-                    vocab_reference,
-                    code_mapping,
+            # New matching flow:
+            # 1) Remove VAL tokens from reference
+            # 2) Translate concepts via inverse vocabs (+ optional code_mapping)
+            # 3) Keep only source indices whose (concept, abspos, age) key exists in reference
+            reference_keys = {
+                (
+                    concept_match_key(concept_id, id_to_token_reference, code_mapping),
+                    abspos,
+                    age,
                 )
-            except ValueError as exc:
-                matched_indices = _fallback_match_indices_ignore_within_time_order(
-                    source_patient, reference_patient
-                )
-                if matched_indices:
-                    fallback_non_order_patients += 1
-                else:
-                    skipped_unalignable_patients += 1
-                    if len(unalignable_examples) < 5:
-                        unalignable_examples.append((source_patient.pid, str(exc)))
+                for concept_id, _val, abspos, _seg, age in target_events
+            }
+            matched_indices = []
+            for idx, (concept_id, _val, abspos, _seg, age) in enumerate(source_events_all):
+                if id_to_token_source.get(concept_id) == VAL_TOKEN:
                     continue
+                key = (
+                    concept_match_key(concept_id, id_to_token_source, code_mapping),
+                    abspos,
+                    age,
+                )
+                if key in reference_keys:
+                    matched_indices.append(idx)
             source_patient.concepts = [source_concepts[i] for i in matched_indices]
             source_patient.values = [source_values[i] for i in matched_indices]
             source_patient.abspos = [source_abspos[i] for i in matched_indices]
@@ -530,25 +474,7 @@ class PatientDataset:
             "nonidentical_start_patients": nonidentical_start_patients,
             "total_patients": len(self.patients),
             "skipped_source_patients_without_reference": skipped_source_patients,
-            "skipped_source_shorter_than_reference": skipped_source_shorter_than_reference,
-            "skipped_unalignable_patients": skipped_unalignable_patients,
-            "fallback_non_order_patients": fallback_non_order_patients,
         }
-        if skipped_source_shorter_than_reference > 0:
-            print(
-                "Warning: Skipped patients where source sequence is shorter than reference. "
-                f"Count={skipped_source_shorter_than_reference}"
-            )
-        if fallback_non_order_patients > 0:
-            print(
-                "Warning: Used non-order fallback matching for patients. "
-                f"Count={fallback_non_order_patients}"
-            )
-        if skipped_unalignable_patients > 0:
-            print(
-                "Warning: Skipped unalignable patients during matching. "
-                f"Count={skipped_unalignable_patients}, examples={unalignable_examples}"
-            )
         print(
             "match_datasets(): non-identical at start "
             f"{nonidentical_start_patients}/{len(self.patients)} patients"
