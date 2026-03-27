@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 from os.path import join
+from typing import Dict, Optional
 
 import pandas as pd
 import torch
@@ -23,6 +24,7 @@ from corebehrt.modules.preparation.dataset import (
     PatientDataset,
     compute_match_source_indices,
     match_events_equal,
+    translate_concept_token,
 )
 from corebehrt.constants.paths import PREPARED_ALL_PATIENTS
 from corebehrt.functional.io_operations.load import load_vocabulary
@@ -66,6 +68,7 @@ def _print_match_alignment_debug(
     source_patient_original,
     vocab_reference: dict,
     vocab_source: dict,
+    code_mapping: Optional[Dict[str, str]],
     max_rows: int = 40,
 ) -> None:
     """
@@ -89,6 +92,7 @@ def _print_match_alignment_debug(
         reference_patient,
         vocab_source,
         vocab_reference,
+        code_mapping,
     )
     used_src = set(matched)
     skipped_src = [i for i in range(n_src) if i not in used_src]
@@ -99,8 +103,8 @@ def _print_match_alignment_debug(
         f"matched_pairs={len(matched)}, skipped_source_rows={len(skipped_src)}"
     )
     print(
-        "  Columns: ref# | token(ref id) | val | seg | abspos | age "
-        "|| src# | token(src id) | val | seg | abspos | age || keys_match"
+        "  Columns: ref# | token(ref id) | translated | val | seg | abspos | age "
+        "|| src# | token(src id) | translated | val | seg | abspos | age || keys_match"
     )
     show = min(max_rows, len(matched))
     for k in range(show):
@@ -125,14 +129,18 @@ def _print_match_alignment_debug(
         )
         tok_r = _abbrev_token(id_ref.get(rc, f"<?:{rc}>"))
         tok_s = _abbrev_token(id_src.get(sc, f"<?:{sc}>"))
-        keys_ok = match_events_equal(src_event, ref_event, id_src, id_ref)
+        tr_r = _abbrev_token(translate_concept_token(id_ref.get(rc, ""), code_mapping))
+        tr_s = _abbrev_token(translate_concept_token(id_src.get(sc, ""), code_mapping))
+        keys_ok = match_events_equal(
+            src_event, ref_event, id_src, id_ref, code_mapping
+        )
         rv = reference_patient.values[k]
         rs = reference_patient.segments[k]
         sv = source_patient_original.values[j]
         ss = source_patient_original.segments[j]
         print(
-            f"  {k:3d} | {tok_r} ({rc}) | {_fmt_value(rv)} | {rs} | {ra:.6g} | {reference_patient.ages[k]:.6g} "
-            f"|| {j:3d} | {tok_s} ({sc}) | {_fmt_value(sv)} | {ss} | {sa:.6g} | {source_patient_original.ages[j]:.6g} "
+            f"  {k:3d} | {tok_r} ({rc}) | {tr_r} | {_fmt_value(rv)} | {rs} | {ra:.6g} | {reference_patient.ages[k]:.6g} "
+            f"|| {j:3d} | {tok_s} ({sc}) | {tr_s} | {_fmt_value(sv)} | {ss} | {sa:.6g} | {source_patient_original.ages[j]:.6g} "
             f"|| {keys_ok}"
         )
     if len(matched) > show:
@@ -173,6 +181,17 @@ def main_match_data(config_path):
     reference_data = PatientDataset(reference_data)
     vocab_reference = load_vocabulary(cfg.paths.reference_data)
 
+    code_mapping = None
+    if "code_mapping" in cfg.paths and cfg.paths["code_mapping"]:
+        cm_path = cfg.paths["code_mapping"]
+        logger.info("Loading code mapping (same as tokenization) from %s", cm_path)
+        code_mapping = torch.load(cm_path)
+    else:
+        logger.warning(
+            "No paths.code_mapping in config: matching compares raw vocabulary tokens. "
+            "For cross-vocab alignment, set code_mapping to the same .pt file used in create_data."
+        )
+
     sample_idx = 1
     print(
         "Loaded datasets:\n"
@@ -189,16 +208,22 @@ def main_match_data(config_path):
 
     ref_sample = reference_data[sample_idx]
     source_before = copy.deepcopy(prepared_data[sample_idx])
-    print("Side-by-side alignment (reference vs original source rows; tokens from vocabs):")
+    print(
+        "Side-by-side alignment (reference vs original source; "
+        "match key = translated + abspos + age):"
+    )
     _print_match_alignment_debug(
         ref_sample,
         source_before,
         vocab_reference,
         vocab_source,
+        code_mapping,
         max_rows=40,
     )
 
-    matched_data = prepared_data.match_datasets(reference_data, vocab_source, vocab_reference)
+    matched_data = prepared_data.match_datasets(
+        reference_data, vocab_source, vocab_reference, code_mapping
+    )
     matched_data.patients = matched_data.process_in_parallel(
         normalize_segments_for_patient
     )

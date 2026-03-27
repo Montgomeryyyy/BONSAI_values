@@ -6,6 +6,8 @@ paths:
 ## INPUTS
   prepared_data: ./outputs/testing/held_out/processed_data_2/ # Save model/outputs to this folder
   reference_data: ./outputs/testing/held_out/processed_data/ # Save match data to this folder
+  # Same code_mapping.pt as in create_data (tokenization); required for matching on translated codes
+  # code_mapping: ./outputs/.../code_mapping.pt
   #runs: ./outputs/pretraining # Use for generating a new model folder
   
   matched_data: ./outputs/testing/held_out/matched_data/ # Save matched data to this folder

@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from os.path import join
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -39,6 +39,42 @@ def _invert_vocab(vocab: Dict) -> Dict:
     return {v: k for k, v in vocab.items()}
 
 
+def concept_id_to_code(concept_id: int, id_to_token: Dict[int, str]) -> str:
+    """Map a concept id to its code string using an inverted vocab (id → token)."""
+    return id_to_token[concept_id]
+
+
+def apply_optional_code_mapping(
+    token: str, code_mapping: Optional[Dict[str, str]]
+) -> str:
+    """
+    Optional merge on top of the vocab string (same dict as EHRTokenizer when needed).
+    """
+    if not code_mapping:
+        return token
+    return code_mapping.get(token, token)
+
+
+def concept_match_key(
+    concept_id: int,
+    id_to_token: Dict[int, str],
+    code_mapping: Optional[Dict[str, str]] = None,
+) -> str:
+    """
+    Match key: invert the given vocab to ``id_to_token``, map ``concept_id`` to its code
+    string, optionally apply ``code_mapping``, then compare to the other side the same way.
+    """
+    code = concept_id_to_code(concept_id, id_to_token)
+    return apply_optional_code_mapping(code, code_mapping)
+
+
+def translate_concept_token(
+    token: str, code_mapping: Optional[Dict[str, str]]
+) -> str:
+    """Backward-compatible alias for apply_optional_code_mapping."""
+    return apply_optional_code_mapping(token, code_mapping)
+
+
 def _match_values_equal(left, right) -> bool:
     if pd.isna(left) and pd.isna(right):
         return True
@@ -55,15 +91,16 @@ def match_events_equal(
     right_event: tuple,
     id_to_token_source: Dict,
     id_to_token_reference: Dict,
+    code_mapping: Optional[Dict[str, str]] = None,
 ) -> bool:
     left_concept_id, _lv, left_abspos, _ls, left_age = left_event
     right_concept_id, _rv, right_abspos, _rs, right_age = right_event
     if left_concept_id not in id_to_token_source or right_concept_id not in id_to_token_reference:
         return False
-    left_token = id_to_token_source[left_concept_id]
-    right_token = id_to_token_reference[right_concept_id]
+    left_key = concept_match_key(left_concept_id, id_to_token_source, code_mapping)
+    right_key = concept_match_key(right_concept_id, id_to_token_reference, code_mapping)
     return (
-        left_token == right_token
+        left_key == right_key
         and _match_values_equal(left_abspos, right_abspos)
         and _match_values_equal(left_age, right_age)
     )
@@ -74,10 +111,12 @@ def compute_match_source_indices(
     reference_patient: PatientData,
     vocab_source: Dict,
     vocab_reference: Dict,
+    code_mapping: Optional[Dict[str, str]] = None,
 ) -> List[int]:
     """
     For each reference event in order, find the matching index in the source sequence
-    (subsequence alignment). Match key: shared concept token, abspos, age (cross-vocabulary).
+    (subsequence alignment). Invert each vocab, map concept ids to code strings, optional
+    code_mapping, then match with abspos and age as before.
     """
     id_to_token_source = _invert_vocab(vocab_source)
     id_to_token_reference = _invert_vocab(vocab_reference)
@@ -117,6 +156,7 @@ def compute_match_source_indices(
             ref_event,
             id_to_token_source,
             id_to_token_reference,
+            code_mapping,
         ):
             source_idx += 1
         if source_idx == len(source_events):
@@ -128,17 +168,22 @@ def compute_match_source_indices(
                 reference_window_start:reference_window_end
             ]
             ref_concept_token = id_to_token_reference[ref_event[0]]
+            ref_match_key = concept_match_key(
+                ref_event[0], id_to_token_reference, code_mapping
+            )
             same_concept_candidates = [
                 (idx, event)
                 for idx, event in enumerate(source_events)
                 if event[0] in id_to_token_source
-                and id_to_token_source[event[0]] == ref_concept_token
+                and concept_match_key(event[0], id_to_token_source, code_mapping)
+                == ref_match_key
             ][:10]
             extra = ""
             if not same_concept_candidates:
                 extra = (
-                    f" No source row in this patient uses vocabulary token {ref_concept_token!r} "
-                    f"(reference concept id={ref_event[0]}); check vocab overlap or data pipeline."
+                    f" No source row in this patient matches key {ref_match_key!r} "
+                    f"(reference vocab token={ref_concept_token!r}, id={ref_event[0]}); "
+                    f"check vocab overlap / pipeline."
                 )
             elif len(source_events) - source_idx < len(reference_events) - ref_idx:
                 extra = (
@@ -148,7 +193,7 @@ def compute_match_source_indices(
             raise ValueError(
                 "Could not align source to reference. "
                 f"PID={pid}, missing reference event at index {ref_idx}: {ref_event}. "
-                f"reference_token={ref_concept_token!r}. "
+                f"reference_token={ref_concept_token!r}, translated_key={ref_match_key!r}. "
                 f"Source events={len(source_events)}, reference events={len(reference_events)}. "
                 f"Reference window ({reference_window_start}:{reference_window_end})={reference_window}. "
                 f"Source tail ({source_window_start}:{len(source_events)})={source_tail}. "
@@ -277,12 +322,13 @@ class PatientDataset:
         reference_dataset: "PatientDataset",
         vocab_source: Dict,
         vocab_reference: Dict,
+        code_mapping: Optional[Dict[str, str]] = None,
     ) -> "PatientDataset":
-        """Align source patients to reference by PID using cross-vocabulary concept tokens.
+        """Align source patients to reference by PID.
 
-        For each event, match on (concept token, abspos, age). Concept IDs are compared
-        via their string tokens in each vocabulary. Values and segments are ignored for
-        matching; matched rows keep source-side values and segments.
+        Invert ``vocab_source`` / ``vocab_reference`` to map concept ids to code strings,
+        optionally apply ``code_mapping``, then match those keys with abspos and age.
+        Values and segments are ignored; matched rows keep source-side values and segments.
         """
         nonidentical_start_patients = 0
 
@@ -348,7 +394,9 @@ class PatientDataset:
                 nonidentical_start_patients += 1
             else:
                 is_identical_at_start = all(
-                    match_events_equal(se, te, id_to_token_source, id_to_token_reference)
+                    match_events_equal(
+                        se, te, id_to_token_source, id_to_token_reference, code_mapping
+                    )
                     for se, te in zip(source_events, target_events)
                 )
                 if not is_identical_at_start:
@@ -359,6 +407,7 @@ class PatientDataset:
                 reference_patient,
                 vocab_source,
                 vocab_reference,
+                code_mapping,
             )
             source_patient.concepts = [source_concepts[i] for i in matched_indices]
             source_patient.values = [source_values[i] for i in matched_indices]
