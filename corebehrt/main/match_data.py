@@ -22,11 +22,10 @@ from corebehrt.functional.io_operations.save import save_pids_splits
 from corebehrt.constants.paths import FOLDS_FILE, TEST_PIDS_FILE
 from corebehrt.modules.preparation.dataset import (
     PatientDataset,
-    compute_match_source_indices,
-    match_events_equal,
     translate_concept_token,
 )
 from corebehrt.constants.paths import PREPARED_ALL_PATIENTS
+from corebehrt.constants.data import VAL_TOKEN
 from corebehrt.functional.io_operations.load import load_vocabulary
 from corebehrt.functional.features.normalize import normalize_segments_for_patient
 
@@ -63,102 +62,58 @@ def _patient_summary(label: str, patient, idx: int) -> None:
     )
 
 
-def _print_match_alignment_debug(
+def _non_val_rows(patient, vocab: dict, code_mapping: Optional[Dict[str, str]], max_rows: int):
+    id_to_token = _invert_vocab(vocab)
+    rows = []
+    for c, v, a, g in zip(patient.concepts, patient.values, patient.abspos, patient.ages):
+        token = id_to_token.get(c, f"<?:{c}>")
+        translated = translate_concept_token(token, code_mapping)
+        if token == VAL_TOKEN or translated == VAL_TOKEN:
+            continue
+        rows.append((translated, _fmt_value(v), a, g))
+        if len(rows) >= max_rows:
+            break
+    return rows
+
+
+def _count_non_val(patient, vocab: dict, code_mapping: Optional[Dict[str, str]]) -> int:
+    id_to_token = _invert_vocab(vocab)
+    count = 0
+    for c in patient.concepts:
+        token = id_to_token.get(c, f"<?:{c}>")
+        translated = translate_concept_token(token, code_mapping)
+        if token == VAL_TOKEN or translated == VAL_TOKEN:
+            continue
+        count += 1
+    return count
+
+
+def _print_patient_side_by_side(
+    pid,
+    source_before,
+    source_after,
     reference_patient,
-    source_patient_original,
-    vocab_reference: dict,
     vocab_source: dict,
+    vocab_reference: dict,
     code_mapping: Optional[Dict[str, str]],
-    max_rows: int = 40,
+    max_rows: int = 8,
 ) -> None:
-    """
-    Side-by-side: each reference event vs the source row chosen by subsequence matching.
-    Also lists source indices that were skipped (extra events in source only).
-    """
-    id_ref = _invert_vocab(vocab_reference)
-    id_src = _invert_vocab(vocab_source)
-    n_ref = len(reference_patient.concepts)
-    n_src = len(source_patient_original.concepts)
-    if n_src < n_ref:
-        print(
-            f"  Alignment pid={reference_patient.pid}: skip side-by-side table — "
-            f"source_events={n_src} < reference_events={n_ref}. "
-            "Subsequence matching needs len(source) >= len(reference) (one source row per reference row)."
-        )
-        return
-
-    matched = compute_match_source_indices(
-        source_patient_original,
-        reference_patient,
-        vocab_source,
-        vocab_reference,
-        code_mapping,
-    )
-    used_src = set(matched)
-    skipped_src = [i for i in range(n_src) if i not in used_src]
-
+    before_n = _count_non_val(source_before, vocab_source, code_mapping)
+    after_n = _count_non_val(source_after, vocab_source, code_mapping)
+    ref_n = _count_non_val(reference_patient, vocab_reference, code_mapping)
     print(
-        f"  Alignment pid={reference_patient.pid}: "
-        f"reference_events={n_ref}, source_events={n_src}, "
-        f"matched_pairs={len(matched)}, skipped_source_rows={len(skipped_src)}"
+        f"  PID={pid}: source_non_val {before_n} -> {after_n}; reference_non_val={ref_n}"
     )
     print(
-        "  Columns: ref# | concept(ref id) | value_ref | abspos_ref | age_ref "
-        "|| src# | concept(src id) | value_src | abspos_src | age_src || keys_match"
+        "    Columns: idx | reference(concept, value, abspos, age) "
+        "|| matched_source(concept, value, abspos, age)"
     )
-    show = min(max_rows, len(matched))
-    for k in range(show):
-        j = matched[k]
-        rc = reference_patient.concepts[k]
-        ra = reference_patient.abspos[k]
-        sc = source_patient_original.concepts[j]
-        sa = source_patient_original.abspos[j]
-        ref_event = (
-            rc,
-            reference_patient.values[k],
-            ra,
-            reference_patient.segments[k],
-            reference_patient.ages[k],
-        )
-        src_event = (
-            sc,
-            source_patient_original.values[j],
-            sa,
-            source_patient_original.segments[j],
-            source_patient_original.ages[j],
-        )
-        tok_r = _abbrev_token(id_ref.get(rc, f"<?:{rc}>"))
-        tok_s = _abbrev_token(id_src.get(sc, f"<?:{sc}>"))
-        tr_r = _abbrev_token(translate_concept_token(id_ref.get(rc, ""), code_mapping))
-        tr_s = _abbrev_token(translate_concept_token(id_src.get(sc, ""), code_mapping))
-        keys_ok = match_events_equal(
-            src_event, ref_event, id_src, id_ref, code_mapping
-        )
-        rv = reference_patient.values[k]
-        sv = source_patient_original.values[j]
-        print(
-            f"  {k:3d} | {tr_r} ({rc}) | {_fmt_value(rv)} | {ra:.6g} | {reference_patient.ages[k]:.6g} "
-            f"|| {j:3d} | {tr_s} ({sc}) | {_fmt_value(sv)} | {sa:.6g} | {source_patient_original.ages[j]:.6g} "
-            f"|| {keys_ok}"
-        )
-    if len(matched) > show:
-        print(f"  ... ({len(matched) - show} more aligned rows not shown)")
-
-    if skipped_src:
-        preview = skipped_src[: min(15, len(skipped_src))]
-        parts = []
-        for j in preview:
-            c = source_patient_original.concepts[j]
-            tok = _abbrev_token(id_src.get(c, f"<?:{c}>"))
-            parts.append(f"{j}:{tok}")
-        extra = "" if len(skipped_src) <= 15 else f" ... (+{len(skipped_src) - 15} more)"
-        print(
-            f"  Source-only rows (not aligned to any reference event): "
-            f"{len(skipped_src)} total. First indices: {preview}{extra}"
-        )
-        print(f"    preview: {', '.join(parts)}")
-    else:
-        print("  Source-only rows: none (source length equals matched span with no extras).")
+    ref_rows = _non_val_rows(reference_patient, vocab_reference, code_mapping, max_rows)
+    src_rows = _non_val_rows(source_after, vocab_source, code_mapping, max_rows)
+    for i in range(max(len(ref_rows), len(src_rows))):
+        left = ref_rows[i] if i < len(ref_rows) else ("-", "-", "-", "-")
+        right = src_rows[i] if i < len(src_rows) else ("-", "-", "-", "-")
+        print(f"    {i:2d} | {left} || {right}")
 
 
 def main_match_data(config_path):
@@ -191,6 +146,8 @@ def main_match_data(config_path):
         )
 
     sample_idx = 1
+    original_n_patients = len(prepared_data)
+    prepared_by_pid_before = {p.pid: copy.deepcopy(p) for p in prepared_data.patients}
     print(
         "Loaded datasets:\n"
         f"  prepared_data: n_patients={len(prepared_data)} "
@@ -204,21 +161,6 @@ def main_match_data(config_path):
     _patient_summary("prepared (source)", prepared_data[sample_idx], sample_idx)
     _patient_summary("reference", reference_data[sample_idx], sample_idx)
 
-    ref_sample = reference_data[sample_idx]
-    source_before = copy.deepcopy(prepared_data[sample_idx])
-    print(
-        "Side-by-side alignment (reference vs original source; "
-        "match key = translated + abspos + age):"
-    )
-    _print_match_alignment_debug(
-        ref_sample,
-        source_before,
-        vocab_reference,
-        vocab_source,
-        code_mapping,
-        max_rows=40,
-    )
-
     matched_data = prepared_data.match_datasets(
         reference_data, vocab_source, vocab_reference, code_mapping
     )
@@ -227,14 +169,44 @@ def main_match_data(config_path):
     )
 
     stats = getattr(matched_data, "match_stats", None)
+    skipped_total = original_n_patients - len(matched_data)
+    print(f"Matching result: kept={len(matched_data)}, skipped={skipped_total}")
     if stats:
         print(
             "match_datasets() stats: "
             f"nonidentical_at_start={stats.get('nonidentical_start_patients')}/"
-            f"{stats.get('total_patients')} patients"
+            f"{stats.get('total_patients')} patients, "
+            f"skipped_without_reference={stats.get('skipped_source_patients_without_reference', 0)}"
         )
     print(f"Sample patient after match (PatientDataset[{sample_idx}]):")
     _patient_summary("matched (source aligned to reference)", matched_data[sample_idx], sample_idx)
+
+    reference_by_pid = {p.pid: p for p in reference_data.patients}
+    changed_pids = []
+    for p in matched_data.patients:
+        before = prepared_by_pid_before.get(p.pid)
+        if before is None:
+            continue
+        before_n = _count_non_val(before, vocab_source, code_mapping)
+        after_n = _count_non_val(p, vocab_source, code_mapping)
+        if before_n != after_n:
+            changed_pids.append(p.pid)
+    print(
+        f"Patients with changed non-VAL sequence length after matching: {len(changed_pids)}"
+    )
+    if changed_pids:
+        print("Examples (reference vs matched source) for changed patients:")
+        for pid in changed_pids[:3]:
+            _print_patient_side_by_side(
+                pid,
+                prepared_by_pid_before[pid],
+                next(p for p in matched_data.patients if p.pid == pid),
+                reference_by_pid[pid],
+                vocab_source,
+                vocab_reference,
+                code_mapping,
+                max_rows=8,
+            )
 
     matched_data.save(cfg.paths.matched_data)
 
