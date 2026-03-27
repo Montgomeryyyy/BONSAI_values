@@ -74,14 +74,22 @@ def _print_match_alignment_debug(
     """
     id_ref = _invert_vocab(vocab_reference)
     id_src = _invert_vocab(vocab_source)
+    n_ref = len(reference_patient.concepts)
+    n_src = len(source_patient_original.concepts)
+    if n_src < n_ref:
+        print(
+            f"  Alignment pid={reference_patient.pid}: skip side-by-side table — "
+            f"source_events={n_src} < reference_events={n_ref}. "
+            "Subsequence matching needs len(source) >= len(reference) (one source row per reference row)."
+        )
+        return
+
     matched = compute_match_source_indices(
         source_patient_original,
         reference_patient,
         vocab_source,
         vocab_reference,
     )
-    n_ref = len(reference_patient.concepts)
-    n_src = len(source_patient_original.concepts)
     used_src = set(matched)
     skipped_src = [i for i in range(n_src) if i not in used_src]
 

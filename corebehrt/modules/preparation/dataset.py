@@ -101,6 +101,14 @@ def compute_match_source_indices(
         )
     )
     pid = source_patient.pid
+    if len(source_events) < len(reference_events):
+        raise ValueError(
+            "Cannot align: source has fewer events than reference, so the full reference "
+            "sequence cannot be embedded as an order-preserving subsequence of the source. "
+            f"PID={pid}, source_events={len(source_events)}, reference_events={len(reference_events)}. "
+            "Use a reference sequence that is not longer than the source, or rebuild the "
+            "source so it contains at least as many events as the reference."
+        )
     matched_indices: List[int] = []
     source_idx = 0
     for ref_idx, ref_event in enumerate(reference_events):
@@ -126,13 +134,25 @@ def compute_match_source_indices(
                 if event[0] in id_to_token_source
                 and id_to_token_source[event[0]] == ref_concept_token
             ][:10]
+            extra = ""
+            if not same_concept_candidates:
+                extra = (
+                    f" No source row in this patient uses vocabulary token {ref_concept_token!r} "
+                    f"(reference concept id={ref_event[0]}); check vocab overlap or data pipeline."
+                )
+            elif len(source_events) - source_idx < len(reference_events) - ref_idx:
+                extra = (
+                    f" Not enough source positions left ({len(source_events) - source_idx}) "
+                    f"to match remaining reference events ({len(reference_events) - ref_idx})."
+                )
             raise ValueError(
                 "Could not align source to reference. "
                 f"PID={pid}, missing reference event at index {ref_idx}: {ref_event}. "
+                f"reference_token={ref_concept_token!r}. "
                 f"Source events={len(source_events)}, reference events={len(reference_events)}. "
                 f"Reference window ({reference_window_start}:{reference_window_end})={reference_window}. "
                 f"Source tail ({source_window_start}:{len(source_events)})={source_tail}. "
-                f"Source candidates with same concept={same_concept_candidates}"
+                f"Source candidates with same concept token={same_concept_candidates}.{extra}"
             )
         matched_indices.append(source_idx)
         source_idx += 1
