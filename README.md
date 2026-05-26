@@ -80,6 +80,7 @@ Below is a high-level overview of the most important directories:
 - **configs**: YAML configuration files for each pipeline stage
 - **functional**: Pure utility functions supporting module operations ([detailed overview](corebehrt/functional/overview.md))
 - **azure**: Cloud deployment and execution utilities ([azure instructions](corebehrt/azure/README.md))
+- **synthetic_data**: Synthetic EHR/lab data generators, post-processing scripts, and analysis helpers ([workflow guide](corebehrt/synthetic_data/README.md))
 
 ## Getting Started
 

@@ -1,8 +1,8 @@
 """
 Generate synthetic data with multiple lab values where positive patients are determined
-by a polynomial equation: c0 + c1*LAB1 + c2*LAB2 + ... + cn*LABn + c12*LAB1*LAB2 + ... + noise > threshold.
+by nested polynomial functions: poly1(poly2(LAB1, LAB2, ...), poly3(LAB1, LAB2, ...), ...) > threshold.
 Coefficients are drawn uniformly from -1 to 1.
-Based on the multi_lab_multiplication.py structure.
+Based on the multi_lab_logistic.py structure.
 """
 
 import pandas as pd
@@ -10,7 +10,7 @@ import numpy as np
 import argparse
 from pathlib import Path
 from typing import Optional, List, Dict
-from theoretical_separation import (
+from corebehrt.synthetic_data.analysis.synthetic_separation_metrics import (
     cohens_d,
     sweep_threshold_auc,
     scipy_mann_whitney_u,
@@ -25,11 +25,12 @@ PATIENTS_INFO_PATH = f"../../../data/vals/patient_infos/patient_info_{N}n.parque
 LAB_MEAN = 0.3  # Mean for all labs
 LAB_STD = 0.1  # Std for all labs
 
-# Polynomial parameters
+# Nested polynomial parameters
 NUM_LABS = 2  # Default to 2 labs, can be changed via command line
-NOISE_LEVEL = 0.0  # Multiplicative noise applied to the polynomial result
+NOISE_LEVEL = 0.0  # Multiplicative noise applied to the nested polynomial result
 POSITIVE_RATE = 0.5  # Default to 50% positive, 50% negative
-POLYNOMIAL_DEGREE = 4  # Default to quadratic (includes interactions)
+NUM_NESTED_POLYS = 3  # Number of nested polynomial functions
+POLY_DEGREE = 2  # Degree of each polynomial (1=linear, 2=quadratic, etc.)
 
 # Diagnosis timing parameters
 DIAG_MIN_DAYS = 10  # Minimum days after last lab for diagnosis
@@ -40,34 +41,48 @@ DEFAULT_PLOT_DIR = f"../../../data/vals/synthetic_data_plots/{N}n/"
 POSITIVE_DIAGS = ["S/DIAG_POSITIVE"]
 
 
-def generate_polynomial_coefficients(
-    num_labs: int, degree: int, seed: int = None
-) -> Dict[str, float]:
+def generate_nested_polynomial_coefficients(
+    num_labs: int, num_nested_polys: int, poly_degree: int, seed: int = None
+) -> Dict[str, Dict[str, float]]:
     """
-    Generate polynomial coefficients uniformly from -1 to 1.
+    Generate coefficients for nested polynomial functions.
+    Each nested polynomial operates on the lab values, and the final polynomial operates on the results.
 
     Args:
         num_labs: Number of lab variables
-        degree: Polynomial degree (1=linear, 2=quadratic with interactions, etc.)
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
         seed: Random seed for reproducibility
 
     Returns:
-        Dict mapping coefficient names to values
+        Dict mapping polynomial names to their coefficient dictionaries
     """
     if seed is not None:
         np.random.seed(seed)
 
     coefficients = {}
 
-    # Constant term
-    coefficients["c0"] = np.random.uniform(-1, 1)
+    # Generate coefficients for each nested polynomial
+    for i in range(1, num_nested_polys + 1):
+        poly_name = f"poly{i}"
+        coefficients[poly_name] = {}
 
-    # Generate all possible combinations for each degree
-    for d in range(1, degree + 1):
-        # Generate all combinations of d lab variables (with repetition allowed, but ordered)
-        for combo in generate_combinations(num_labs, d):
-            coef_name = "c" + "".join(map(str, combo))
-            coefficients[coef_name] = np.random.uniform(-1, 1)
+        # Constant term
+        coefficients[poly_name]["c0"] = np.random.uniform(-1, 1)
+
+        # Generate all possible combinations for each degree
+        for d in range(1, poly_degree + 1):
+            for combo in generate_combinations(num_labs, d):
+                coef_name = "c" + "".join(map(str, combo))
+                coefficients[poly_name][coef_name] = np.random.uniform(-1, 1)
+
+    # Generate coefficients for the final polynomial that operates on nested results
+    coefficients["final_poly"] = {}
+    coefficients["final_poly"]["c0"] = np.random.uniform(-1, 1)
+
+    # Linear terms for each nested polynomial result
+    for i in range(1, num_nested_polys + 1):
+        coefficients["final_poly"][f"c{i}"] = np.random.uniform(-1, 1)
 
     return coefficients
 
@@ -109,7 +124,7 @@ def evaluate_polynomial(
     lab_values: List[float], coefficients: Dict[str, float], num_labs: int, degree: int
 ) -> float:
     """
-    Evaluate the polynomial function for given lab values.
+    Evaluate a polynomial function for given lab values.
 
     Args:
         lab_values: List of lab values [LAB1, LAB2, ..., LABn]
@@ -141,6 +156,43 @@ def evaluate_polynomial(
                 result += coef_value * term_value
 
     return result
+
+
+def evaluate_nested_polynomials(
+    lab_values: List[float],
+    coefficients: Dict[str, Dict[str, float]],
+    num_labs: int,
+    num_nested_polys: int,
+    poly_degree: int,
+) -> float:
+    """
+    Evaluate nested polynomial functions for given lab values.
+
+    Args:
+        lab_values: List of lab values [LAB1, LAB2, ..., LABn]
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_labs: Number of lab variables
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
+
+    Returns:
+        float: Final nested polynomial evaluation result
+    """
+    # Evaluate each nested polynomial on the lab values
+    nested_results = []
+    for i in range(1, num_nested_polys + 1):
+        poly_name = f"poly{i}"
+        nested_result = evaluate_polynomial(
+            lab_values, coefficients[poly_name], num_labs, poly_degree
+        )
+        nested_results.append(nested_result)
+
+    # Evaluate the final polynomial on the nested results
+    final_result = evaluate_polynomial(
+        nested_results, coefficients["final_poly"], num_nested_polys, 1
+    )  # Linear combination of nested results
+
+    return final_result
 
 
 def get_positive_patients(data: pd.DataFrame, positive_diags: list) -> pd.DataFrame:
@@ -195,40 +247,86 @@ def generate_lab_value(
     return base_value
 
 
-def print_polynomial_equation(
-    coefficients: Dict[str, float], num_labs: int, degree: int
+def print_nested_polynomial_equation(
+    coefficients: Dict[str, Dict[str, float]],
+    num_labs: int,
+    num_nested_polys: int,
+    poly_degree: int,
 ) -> None:
     """
-    Print the polynomial equation in a readable format.
+    Print the nested polynomial equation in a readable format.
 
     Args:
-        coefficients: Dictionary of polynomial coefficients
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
         num_labs: Number of lab variables
-        degree: Polynomial degree
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
     """
-    print(f"\nPolynomial equation (degree {degree}):")
-    print("result = ", end="")
+    print(f"\nNested polynomial equation:")
+    print("result = final_poly(", end="")
 
-    terms = []
+    # Print each nested polynomial
+    nested_terms = []
+    for i in range(1, num_nested_polys + 1):
+        poly_name = f"poly{i}"
+        poly_terms = []
 
-    # Constant term
-    if "c0" in coefficients and abs(coefficients["c0"]) > 1e-6:
-        terms.append(f"{coefficients['c0']:.3f}")
+        # Constant term
+        if (
+            "c0" in coefficients[poly_name]
+            and abs(coefficients[poly_name]["c0"]) > 1e-6
+        ):
+            poly_terms.append(f"{coefficients[poly_name]['c0']:.3f}")
 
-    # All polynomial terms
-    for d in range(1, degree + 1):
-        for combo in generate_combinations(num_labs, d):
-            coef_name = "c" + "".join(map(str, combo))
-            if coef_name in coefficients and abs(coefficients[coef_name]) > 1e-6:
-                # Format the term
-                term_str = format_polynomial_term(coefficients[coef_name], combo)
-                terms.append(term_str)
+        # All polynomial terms
+        for d in range(1, poly_degree + 1):
+            for combo in generate_combinations(num_labs, d):
+                coef_name = "c" + "".join(map(str, combo))
+                if (
+                    coef_name in coefficients[poly_name]
+                    and abs(coefficients[poly_name][coef_name]) > 1e-6
+                ):
+                    # Format the term
+                    term_str = format_polynomial_term(
+                        coefficients[poly_name][coef_name], combo
+                    )
+                    poly_terms.append(term_str)
 
-    if not terms:
-        print("0")
+        if not poly_terms:
+            nested_terms.append("0")
+        else:
+            nested_terms.append(" + ".join(poly_terms).replace("+ -", "- "))
+
+    print(", ".join(nested_terms), end="")
+    print(")")
+
+    # Print the final polynomial
+    print("where:")
+    for i, nested_term in enumerate(nested_terms, 1):
+        print(f"  poly{i} = {nested_term}")
+
+    # Print final polynomial
+    final_terms = []
+    if (
+        "c0" in coefficients["final_poly"]
+        and abs(coefficients["final_poly"]["c0"]) > 1e-6
+    ):
+        final_terms.append(f"{coefficients['final_poly']['c0']:.3f}")
+
+    for i in range(1, num_nested_polys + 1):
+        coef_name = f"c{i}"
+        if (
+            coef_name in coefficients["final_poly"]
+            and abs(coefficients["final_poly"][coef_name]) > 1e-6
+        ):
+            final_terms.append(f"{coefficients['final_poly'][coef_name]:.3f}*poly{i}")
+
+    if not final_terms:
+        final_expr = "0"
     else:
-        print(" + ".join(terms).replace("+ -", "- "))
-    print()
+        final_expr = " + ".join(final_terms).replace("+ -", "- ")
+
+    print(f"  final_poly = {final_expr}")
 
 
 def format_polynomial_term(coef_value: float, combo: List[int]) -> str:
@@ -273,8 +371,9 @@ def find_optimal_threshold(
     pids_list: List[str],
     num_labs: int,
     lab_value_info: dict,
-    coefficients: Dict[str, float],
-    degree: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
     target_positive_rate: float = 0.5,
 ) -> float:
     """
@@ -284,18 +383,19 @@ def find_optimal_threshold(
         pids_list: List of patient IDs
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
         target_positive_rate: Target fraction of positive cases (e.g., 0.5 for 50%)
 
     Returns:
         float: Optimal threshold
     """
-    # Generate a sample of polynomial results to find the threshold
+    # Generate a sample of nested polynomial results to find the threshold
     sample_size = min(10000, len(pids_list))  # Use up to 10k samples for efficiency
     sample_pids = np.random.choice(pids_list, size=sample_size, replace=False)
 
-    polynomial_results = []
+    nested_poly_results = []
     for pid in sample_pids:
         # Generate clean lab values
         clean_lab_values = []
@@ -308,15 +408,15 @@ def find_optimal_threshold(
                 clean_lab_values.append(clean_lab_value)
 
         if len(clean_lab_values) == num_labs:
-            # Calculate clean polynomial evaluation
-            clean_polynomial_result = evaluate_polynomial(
-                clean_lab_values, coefficients, num_labs, degree
+            # Calculate clean nested polynomial evaluation
+            clean_nested_poly_result = evaluate_nested_polynomials(
+                clean_lab_values, coefficients, num_labs, num_nested_polys, poly_degree
             )
-            polynomial_results.append(clean_polynomial_result)
+            nested_poly_results.append(clean_nested_poly_result)
 
     # Find threshold that gives target positive rate
-    polynomial_results = np.array(polynomial_results)
-    threshold = np.percentile(polynomial_results, (1 - target_positive_rate) * 100)
+    nested_poly_results = np.array(nested_poly_results)
+    threshold = np.percentile(nested_poly_results, (1 - target_positive_rate) * 100)
 
     return threshold
 
@@ -326,23 +426,25 @@ def generate_n_lab_concepts(
     threshold: float,
     num_labs: int,
     lab_value_info: dict,
-    coefficients: Dict[str, float],
-    degree: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
     noise_level: float = 0.0,
 ) -> pd.DataFrame:
     """
     Generate exactly N lab concepts (LAB1, LAB2, ..., LABN) for each patient.
-    Patient risk is determined by polynomial evaluation with multiplicative noise > threshold.
-    Individual lab values are clean (no noise), but noise is applied to the polynomial result.
+    Patient risk is determined by nested polynomial evaluation with multiplicative noise > threshold.
+    Individual lab values are clean (no noise), but noise is applied to the nested polynomial result.
 
     Args:
         pids_list: List of patient IDs
-        threshold: Threshold for polynomial evaluation > threshold equation
+        threshold: Threshold for nested polynomial evaluation > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
-        noise_level: Amount of multiplicative noise to add to the polynomial result
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
+        noise_level: Amount of multiplicative noise to add to the nested polynomial result
 
     Returns:
         pd.DataFrame: DataFrame containing PID, CONCEPT, and RESULT columns
@@ -365,20 +467,20 @@ def generate_n_lab_concepts(
                 lab_concepts.append(lab_concept)
 
         if len(clean_lab_values) == num_labs:  # Ensure we have all labs
-            # Calculate clean polynomial evaluation
-            clean_polynomial_result = evaluate_polynomial(
-                clean_lab_values, coefficients, num_labs, degree
+            # Calculate clean nested polynomial evaluation
+            clean_nested_poly_result = evaluate_nested_polynomials(
+                clean_lab_values, coefficients, num_labs, num_nested_polys, poly_degree
             )
 
-            # Add multiplicative noise to the polynomial result, then determine risk
+            # Add multiplicative noise to the nested polynomial result, then determine risk
             if noise_level > 0:
-                # Multiplicative noise (keeps values positive if polynomial result is positive)
+                # Multiplicative noise
                 noise_factor = np.random.normal(1.0, noise_level)
-                noisy_polynomial_result = clean_polynomial_result * noise_factor
+                noisy_nested_poly_result = clean_nested_poly_result * noise_factor
             else:
-                noisy_polynomial_result = clean_polynomial_result
+                noisy_nested_poly_result = clean_nested_poly_result
 
-            is_high_risk = noisy_polynomial_result > threshold
+            is_high_risk = noisy_nested_poly_result > threshold
 
             patient_risk_map[pid] = is_high_risk
             condition = "high_risk" if is_high_risk else "low_risk"
@@ -526,8 +628,9 @@ def generate_synthetic_data(
     threshold: float,
     num_labs: int,
     lab_value_info: dict,
-    coefficients: Dict[str, float],
-    degree: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
     diag_min_days: int = DIAG_MIN_DAYS,
     diag_max_days: int = DIAG_MAX_DAYS,
     noise_level: float = NOISE_LEVEL,
@@ -535,19 +638,20 @@ def generate_synthetic_data(
 ) -> pd.DataFrame:
     """
     Generate synthetic data with exactly N lab values per patient (LAB1, LAB2, ..., LABN).
-    Patient risk is determined by polynomial evaluation with multiplicative noise > threshold.
-    Noise is applied to the polynomial result, not to individual lab values.
+    Patient risk is determined by nested polynomial evaluation with multiplicative noise > threshold.
+    Noise is applied to the nested polynomial result, not to individual lab values.
 
     Args:
         input_data: DataFrame containing existing synthetic data with patient assignments
-        threshold: Threshold for polynomial evaluation > threshold equation
+        threshold: Threshold for nested polynomial evaluation > threshold equation
         num_labs: Number of labs per patient
         lab_value_info: Dictionary containing lab distribution information
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
         diag_min_days: Minimum days after last lab for diagnosis
         diag_max_days: Maximum days after last lab for diagnosis
-        noise_level: Amount of multiplicative noise to add to the polynomial result
+        noise_level: Amount of multiplicative noise to add to the nested polynomial result
 
     Returns:
         pd.DataFrame: Generated synthetic data
@@ -562,11 +666,12 @@ def generate_synthetic_data(
         num_labs,
         lab_value_info,
         coefficients,
-        degree,
+        num_nested_polys,
+        poly_degree,
         noise_level,
     )
 
-    # Create final DataFrame - match multi_lab_addition.py structure exactly
+    # Create final DataFrame - match multi_lab_logistic.py structure exactly
     data = pd.DataFrame(
         {
             "subject_id": concepts_data["PID"],
@@ -589,16 +694,21 @@ def generate_synthetic_data(
 
 
 def print_statistics(
-    data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int
+    data: pd.DataFrame,
+    num_labs: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
 ) -> None:
     """
-    Print statistics about the lab values and polynomial coefficients.
+    Print statistics about the lab values and nested polynomial coefficients.
 
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
     """
     # Recreate is_positive column for analysis
     positive_patients = set(
@@ -638,10 +748,12 @@ def print_statistics(
         f"Low-risk patients - Labs per patient: {negative_labs_per_patient.mean():.1f} (should be {num_labs}.0)"
     )
 
-    # Print polynomial coefficients
-    print(f"\nPolynomial coefficients (degree {degree}):")
-    for coef_name, coef_value in sorted(coefficients.items()):
-        print(f"  {coef_name}: {coef_value:.3f}")
+    # Print nested polynomial coefficients
+    print(f"\nNested polynomial coefficients:")
+    for poly_name, poly_coeffs in coefficients.items():
+        print(f"  {poly_name}:")
+        for coef_name, coef_value in sorted(poly_coeffs.items()):
+            print(f"    {coef_name}: {coef_value:.3f}")
 
     # Verify that every patient has a diagnosis
     total_patients = data["subject_id"].nunique()
@@ -665,22 +777,29 @@ def print_statistics(
 
 
 def calculate_theoretical_performance(
-    data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int
+    data: pd.DataFrame,
+    num_labs: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
 ) -> dict:
     """
-    Calculate the theoretical performance of the model based on polynomial equation.
+    Calculate the theoretical performance of the model based on nested polynomial equation.
 
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
 
     Returns:
         dict: Dictionary containing performance metrics
     """
-    # Calculate polynomial-based AUC
-    polynomial_auc = calculate_polynomial_auc(data, num_labs, coefficients, degree)
+    # Calculate nested polynomial-based AUC
+    nested_poly_auc = calculate_nested_polynomial_auc(
+        data, num_labs, coefficients, num_nested_polys, poly_degree
+    )
 
     # Calculate other metrics
     sweep_auc = sweep_threshold_auc(data)
@@ -689,25 +808,29 @@ def calculate_theoretical_performance(
 
     print("\nTheoretical performance:")
     print(
-        f"Polynomial-based AUC (clean polynomial vs noisy ground truth): {polynomial_auc}"
+        f"Nested polynomial-based AUC (clean nested poly vs noisy ground truth): {nested_poly_auc}"
     )
     print(f"Sweep AUC (LAB1 only): {sweep_auc}")
     print(f"Scipy Mann-Whitney U (LAB1 only): {scipy_mann_whitney_u_auc}")
     print(f"Cohen's d (LAB1 only): {cohens_d_metric}")
 
     return {
-        "polynomial_auc": polynomial_auc,
+        "nested_poly_auc": nested_poly_auc,
         "sweep_auc": sweep_auc,
         "scipy_mann_whitney_u_auc": scipy_mann_whitney_u_auc,
         "cohens_d_metric": cohens_d_metric,
     }
 
 
-def calculate_polynomial_auc(
-    data: pd.DataFrame, num_labs: int, coefficients: Dict[str, float], degree: int
+def calculate_nested_polynomial_auc(
+    data: pd.DataFrame,
+    num_labs: int,
+    coefficients: Dict[str, Dict[str, float]],
+    num_nested_polys: int,
+    poly_degree: int,
 ) -> float:
     """
-    Calculate AUC for detecting high-risk patients based on polynomial evaluation.
+    Calculate AUC for detecting high-risk patients based on nested polynomial evaluation.
 
     Note: This calculates the theoretical maximum AUC that a perfect model could achieve
     using the clean lab values to predict the noisy ground truth labels.
@@ -715,11 +838,12 @@ def calculate_polynomial_auc(
     Args:
         data: DataFrame containing the synthetic data
         num_labs: Number of labs per patient
-        coefficients: Dictionary of polynomial coefficients
-        degree: Polynomial degree
+        coefficients: Dictionary of polynomial coefficients for all nested polynomials
+        num_nested_polys: Number of nested polynomial functions
+        poly_degree: Degree of each polynomial
 
     Returns:
-        float: AUC for polynomial-based detection
+        float: AUC for nested polynomial-based detection
     """
     # Get lab values for each patient (these are clean, no noise)
     lab_data_dict = {}
@@ -730,34 +854,34 @@ def calculate_polynomial_auc(
             .first()
         )
 
-    # Get patient risks (these are based on noisy polynomial + threshold)
+    # Get patient risks (these are based on noisy nested polynomial + threshold)
     positive_patients = set(
         data[data["code"] == "S/DIAG_POSITIVE"]["subject_id"].unique()
     )
     patient_risks = list(lab_data_dict.values())[0].index.isin(positive_patients)
 
-    # Calculate actual polynomial scores for each patient
-    polynomial_scores = []
+    # Calculate actual nested polynomial scores for each patient
+    nested_poly_scores = []
     for patient_id in list(lab_data_dict.values())[0].index:
         lab_values = [
             lab_data_dict[f"LAB{i}"][patient_id] for i in range(1, num_labs + 1)
         ]
-        polynomial_score = evaluate_polynomial(
-            lab_values, coefficients, num_labs, degree
+        nested_poly_score = evaluate_nested_polynomials(
+            lab_values, coefficients, num_labs, num_nested_polys, poly_degree
         )
-        polynomial_scores.append(polynomial_score)
+        nested_poly_scores.append(nested_poly_score)
 
-    polynomial_scores = np.array(polynomial_scores)
+    nested_poly_scores = np.array(nested_poly_scores)
 
     from sklearn.metrics import roc_auc_score
 
-    auc = roc_auc_score(patient_risks, polynomial_scores)
+    auc = roc_auc_score(patient_risks, nested_poly_scores)
     return auc
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by polynomial evaluation with multiplicative noise > threshold"
+        description="Generate synthetic data with exactly N lab values per patient where positive patients are determined by nested polynomial evaluation with multiplicative noise > threshold"
     )
     parser.add_argument(
         "--input_file",
@@ -772,10 +896,16 @@ def main():
         help="Number of labs per patient",
     )
     parser.add_argument(
-        "--degree",
+        "--num_nested_polys",
         type=int,
-        default=POLYNOMIAL_DEGREE,
-        help="Polynomial degree (1=linear, 2=quadratic with interactions, etc.)",
+        default=NUM_NESTED_POLYS,
+        help="Number of nested polynomial functions",
+    )
+    parser.add_argument(
+        "--poly_degree",
+        type=int,
+        default=POLY_DEGREE,
+        help="Degree of each polynomial (1=linear, 2=quadratic, etc.)",
     )
     parser.add_argument(
         "--diag_min_days",
@@ -799,7 +929,7 @@ def main():
         "--noise_level",
         type=float,
         default=NOISE_LEVEL,
-        help="Multiplicative noise level for the polynomial result (0.0 = no noise, 0.1 = 10% noise)",
+        help="Multiplicative noise level for the nested polynomial result (0.0 = no noise, 0.1 = 10% noise)",
     )
     parser.add_argument(
         "--patient_info_path",
@@ -849,13 +979,15 @@ def main():
     print(f"Total records: {len(input_data)}")
     print(f"Total patients: {input_data['subject_id'].nunique()}")
 
-    # Generate polynomial coefficients
-    coefficients = generate_polynomial_coefficients(
-        args.num_labs, args.degree, args.seed
+    # Generate nested polynomial coefficients
+    coefficients = generate_nested_polynomial_coefficients(
+        args.num_labs, args.num_nested_polys, args.poly_degree, args.seed
     )
 
-    # Print the polynomial equation
-    print_polynomial_equation(coefficients, args.num_labs, args.degree)
+    # Print the nested polynomial equation
+    print_nested_polynomial_equation(
+        coefficients, args.num_labs, args.num_nested_polys, args.poly_degree
+    )
 
     # Generate lab value info for threshold calculation
     lab_value_info = {}
@@ -875,7 +1007,8 @@ def main():
         args.num_labs,
         lab_value_info,
         coefficients,
-        args.degree,
+        args.num_nested_polys,
+        args.poly_degree,
         args.positive_rate,
     )
 
@@ -885,13 +1018,15 @@ def main():
         f"  - Each patient gets exactly {args.num_labs} lab values (LAB1, LAB2, ..., LAB{args.num_labs})"
     )
     print(f"  - All labs use same distribution: mean={LAB_MEAN}, std={LAB_STD}")
-    print(f"  - Polynomial degree: {args.degree}")
+    print(
+        f"  - {args.num_nested_polys} nested polynomial functions of degree {args.poly_degree}"
+    )
     print(
         f"  - Optimal threshold for {args.positive_rate * 100:.0f}% positive rate: {optimal_threshold:.6f}"
     )
     print(f"  - Individual lab values are clean (no noise)")
     print(
-        f"  - Multiplicative noise ({args.noise_level * 100:.0f}%) is applied to the polynomial result"
+        f"  - Multiplicative noise ({args.noise_level * 100:.0f}%) is applied to the nested polynomial result"
     )
     print(
         f"  - Diagnosis timing: {args.diag_min_days}-{args.diag_max_days} days after last lab"
@@ -902,7 +1037,7 @@ def main():
         f"_noise{int(args.noise_level * 100)}" if args.noise_level > 0 else ""
     )
     seed_suffix = f"_seed{args.seed}" if args.seed is not None else ""
-    save_name = f"n_lab_polynomial_{args.num_labs}labs_deg{args.degree}_mean{int(LAB_MEAN * 100)}p{int(LAB_STD * 100)}{noise_suffix}{seed_suffix}_n{N}"
+    save_name = f"n_lab_nested_poly_{args.num_labs}labs_{args.num_nested_polys}polys_deg{args.poly_degree}_mean{int(LAB_MEAN * 100)}p{int(LAB_STD * 100)}{noise_suffix}{seed_suffix}_n{N}"
 
     # Generate synthetic data using optimal threshold
     data = generate_synthetic_data(
@@ -911,7 +1046,8 @@ def main():
         args.num_labs,
         lab_value_info,
         coefficients,
-        args.degree,
+        args.num_nested_polys,
+        args.poly_degree,
         args.diag_min_days,
         args.diag_max_days,
         args.noise_level,
@@ -922,7 +1058,9 @@ def main():
     print(data.head())
 
     # Print statistics
-    print_statistics(data, args.num_labs, coefficients, args.degree)
+    print_statistics(
+        data, args.num_labs, coefficients, args.num_nested_polys, args.poly_degree
+    )
 
     # Write to CSV
     write_dir = Path(args.write_dir)
@@ -958,7 +1096,7 @@ def main():
 
     # Calculate theoretical performance
     _ = calculate_theoretical_performance(
-        data, args.num_labs, coefficients, args.degree
+        data, args.num_labs, coefficients, args.num_nested_polys, args.poly_degree
     )
 
 

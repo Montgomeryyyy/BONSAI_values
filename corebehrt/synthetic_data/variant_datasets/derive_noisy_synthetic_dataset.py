@@ -8,7 +8,7 @@ import argparse
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
-from theoretical_separation import (
+from corebehrt.synthetic_data.analysis.synthetic_separation_metrics import (
     cohens_d,
     sweep_threshold_auc,
     scipy_mann_whitney_u,

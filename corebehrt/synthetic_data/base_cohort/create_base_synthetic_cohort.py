@@ -12,6 +12,7 @@ from pathlib import Path
 PATIENTS_INFO_PATH = "../../../data/vals/patient_infos/patient_info_10000n.parquet"
 DEFAULT_WRITE_DIR = "../../../data/vals/synthetic_data/10000n/"
 SAVE_NAME = "bn_labs_n10000_50p_1unq"
+LABEL_CONCEPTS = {"S/DIAG_POSITIVE", "S/DIAG_NEGATIVE"}
 
 # Define lab value ranges and their probabilities for different conditions
 LAB_VALUE_INFO = {
@@ -280,6 +281,46 @@ def generate_timestamps(
     return timestamps
 
 
+def exclude_patients_with_post_death_labels(
+    data: pd.DataFrame, patient_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Remove patients whose diagnosis labels occur after their death date.
+
+    Patients without a recorded death date are kept.
+
+    Args:
+        data: Generated synthetic data with timestamps
+        patient_df: DataFrame containing patient information
+
+    Returns:
+        pd.DataFrame: Filtered data excluding patients with post-death labels
+    """
+    patient_deathdates = patient_df[["PID", "deathdate"]].copy()
+    patient_deathdates["deathdate"] = pd.to_datetime(patient_deathdates["deathdate"])
+
+    data_with_death = data.merge(
+        patient_deathdates,
+        left_on="subject_id",
+        right_on="PID",
+        how="left",
+    )
+
+    post_death_patients = data_with_death[
+        data_with_death["code"].isin(LABEL_CONCEPTS)
+        & data_with_death["deathdate"].notna()
+        & (data_with_death["time"] > data_with_death["deathdate"])
+    ]["subject_id"].unique()
+
+    if len(post_death_patients) == 0:
+        return data
+
+    print(
+        f"Excluding {len(post_death_patients)} patients with diagnosis labels after death"
+    )
+    return data[~data["subject_id"].isin(post_death_patients)].copy()
+
+
 def generate_data(patient_df: pd.DataFrame, write_dir: str) -> None:
     """
     Generate synthetic data for patients and save to parquet.
@@ -328,6 +369,7 @@ def generate_data(patient_df: pd.DataFrame, write_dir: str) -> None:
     data["time"] = generate_timestamps(
         data["subject_id"].tolist(), patient_df, data["code"].tolist()
     )
+    data = exclude_patients_with_post_death_labels(data, patient_df)
 
     print(data.head())
 
@@ -336,8 +378,9 @@ def generate_data(patient_df: pd.DataFrame, write_dir: str) -> None:
     write_dir.mkdir(parents=True, exist_ok=True)
     data.to_csv(write_dir / f"{SAVE_NAME}.csv", index=False)
 
+    final_patient_count = data["subject_id"].nunique()
     print(
-        f"\nGenerated data for {len(patient_df)} patients, a total of {len(data)} records"
+        f"\nGenerated data for {final_patient_count} patients, a total of {len(data)} records"
     )
     print(f"Saved to {write_dir / f'{SAVE_NAME}.csv'}")
 
