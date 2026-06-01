@@ -7,7 +7,7 @@
 
 This is the official repository for the ICML 2026 paper **“How Should Transformers Encode Numeric Values in Electronic Health Records?”**
 
-The paper is available here: [PDF](paper/icml2026_camera_ready.pdf)
+The paper is available here: [PDF](https://raw.githubusercontent.com/Montgomeryyyy/BONSAI_values/main/paper/icml2026_camera_ready.pdf)
 
 This repository contains code for:
 
