@@ -1,20 +1,26 @@
-# BONSAI
+# How Should Transformers Encode Numeric Values in Electronic Health Records?
 
 [![Pipeline tests](https://github.com/FGA-DIKU/EHR/actions/workflows/pipeline.yml/badge.svg)](https://github.com/FGA-DIKU/EHR/actions/workflows/pipeline.yml)
 [![Unittests](https://github.com/FGA-DIKU/EHR/actions/workflows/unittests.yml/badge.svg)](https://github.com/FGA-DIKU/EHR/actions/workflows/unittests.yml)
 [![Format](https://github.com/FGA-DIKU/EHR/actions/workflows/format.yml/badge.svg)](https://github.com/FGA-DIKU/EHR/actions/workflows/format.yml)
 [![Lint](https://github.com/FGA-DIKU/EHR/actions/workflows/lint.yml/badge.svg)](https://github.com/FGA-DIKU/EHR/actions/workflows/lint.yml)
-![Doc Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/kirilklein/b02ecb317ea24a8ced5e72ae96e1c0c3/raw/docstr-coverage.json)
-![Test Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/kirilklein/b02ecb317ea24a8ced5e72ae96e1c0c3/raw/covbadge.json)
 
-> **A framework for processing and analyzing Electronic Health Records (EHR) data using transformer-based models.**
+This is the official repository for the ICML 2026 paper **“How Should Transformers Encode Numeric Values in Electronic Health Records?”**
 
-BONSAI helps researchers and data scientists preprocess EHR data, train models, and generate outcomes for downstream clinical predictions and analyses.
+The paper is available here: [PDF](paper/icml2026_camera_ready.pdf)
+
+This repository contains code for:
+
+- implementing the numeric encoding schemes evaluated in the paper
+- generating the synthetic tasks used to evaluate numeric reasoning
+
+The implementation builds on the repository described in:
+
+Montgomery et al. (2025). **BONSAI: A framework for processing and analysing Electronic Health Records (EHR) data using transformer-based models.** *Journal of Open Source Software*, 10(114), 8869. https://doi.org/10.21105/joss.08869
+
 
 ---
-This repository was developed in relation to evaluating different representations of numeric values in an EHR transformer setup, based on the BONSAI repository: https://github.com/kirilklein/PHAIR_EHR .
-
-### Numeric Value Representation
+### Numeric Value Encodings
 
 The repository supports four methods for handling numeric values (e.g., lab results, vital signs) in EHR sequences:
 
@@ -35,6 +41,10 @@ The repository supports four methods for handling numeric values (e.g., lab resu
 - `corebehrt.functional.features.values` - Utility functions for binning and discretising numeric values 
 
 For more details on the overall pipeline, see the sections below.
+
+### Synthetic Data
+
+See the [synthetic data workflow guide](corebehrt/synthetic_data/README.md) for how to create base cohorts and variant synthetic datasets.
 
 ---
 
